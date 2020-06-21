@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/hashicorp/terraform/backend/local"
 	"github.com/hashicorp/terraform/helper/logging"
@@ -21,56 +25,161 @@ var (
 	displayPlan = app.Flag("display-plan", "Print the full plan before the results").Default("false").Bool()
 )
 
+type testCase struct {
+	dir          string
+	variableFile string
+	specFile     string
+}
+
+func (tc *testCase) name() string {
+	return filepath.Base(tc.dir)
+}
+
+type testReport struct {
+	name   string
+	plan   string
+	report tfdiags.Diagnostics
+}
+
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
+	testCases := findCases(*specDir)
+	if len(testCases) == 0 {
+		log.Fatal("No test case found")
+	}
+
+	reports := make(chan *testReport)
+
+	var wg sync.WaitGroup
+	for _, tc := range testCases {
+		wg.Add(1)
+		go func(tc *testCase) {
+			runTestCase(tc, reports)
+			wg.Done()
+		}(tc)
+	}
+	exitCode := 0
+	go func() {
+		wg.Wait()
+		close(reports)
+	}()
+
+	for r := range reports {
+		fmt.Printf("REPORT FOR TEST CASE : %s\n", r.name)
+		if r.report.HasErrors() {
+			exitCode = 1
+		}
+		if *displayPlan {
+			fmt.Println(r.plan)
+		}
+		printDiags(r.report)
+	}
+	os.Exit(exitCode)
+}
+
+func runTestCase(tc *testCase, results chan<- *testReport) {
 	// Disable terraform verbose logging except if TF_LOF is set
 	logging.SetOutput()
+	var planOutput string
 
-	tfCtx, ctxDiags := terraspec.NewContext(".", "spec/with_public_ip/override.tfvars") // Setting a different folder works to parse configuration but not the modules :/
-	FatalDiags(ctxDiags)
+	tfCtx, ctxDiags := terraspec.NewContext(".", tc.variableFile) // Setting a different folder works to parse configuration but not the modules :/
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
 	plan, ctxDiags := tfCtx.Plan()
-	FatalDiags(ctxDiags)
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
 
 	log.SetOutput(os.Stderr)
+	var stdout = &strings.Builder{}
 
 	if *displayPlan {
 		ui := &cli.BasicUi{
 			Reader:      os.Stdin,
-			Writer:      os.Stdout,
-			ErrorWriter: os.Stderr,
+			Writer:      stdout,
+			ErrorWriter: stdout,
 		}
 		local.RenderPlan(plan, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
+		planOutput = stdout.String()
 	}
 	logging.SetOutput()
-	// TODO Browse all specs in spec dir, compute them in parallel and output all their results
-	spec, diags := terraspec.ReadSpec("spec/with_public_ip/with_public_ip.tfspec", tfCtx.Schemas())
-	FatalDiags(diags)
-	diags, err := spec.Validate(plan)
+
+	spec, ctxDiags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
+	ctxDiags, err := spec.Validate(plan)
+	if err != nil {
+		// TODO manage this error by returning a report with an error diagnostic
+		log.Fatal(err)
+	}
+	results <- &testReport{name: tc.name(), report: ctxDiags, plan: planOutput}
+}
+
+func findCases(rootDir string) []*testCase {
+	testCases := make([]*testCase, 0)
+
+	rootFis, err := ioutil.ReadDir(rootDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	FatalDiags(diags)
-	os.Exit(0)
 
+	for _, rootFi := range rootFis {
+		if !rootFi.IsDir() {
+			continue
+		}
+		if testCase := findCase(filepath.Join(rootDir, rootFi.Name())); testCase != nil {
+			testCases = append(testCases, testCase)
+		}
+	}
+	if testCase := findCase(rootDir); testCase != nil {
+		testCases = append(testCases, testCase)
+	}
+	return testCases
 }
 
-// FatalDiags prints all errors contained in given Diagnostics and exit
-// If given Diagnostics has no error, application is not exited
-func FatalDiags(ctxDiags tfdiags.Diagnostics) {
-	if ctxDiags.HasErrors() {
-		log.SetOutput(os.Stderr)
-		for _, diag := range ctxDiags {
-			if subj := diag.Source().Subject; subj != nil {
-				fmt.Printf("%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
-			}
-			if diag.Description().Summary != "" {
-				fmt.Println(diag.Description().Summary)
-			} else {
-				fmt.Println(diag.Description().Detail)
-			}
-
+func findCase(rootDir string) *testCase {
+	fis, err := ioutil.ReadDir(rootDir)
+	if err != nil {
+		return nil
+	}
+	var varFile, specFile string
+	for _, fi := range fis {
+		if fi.IsDir() {
+			continue
 		}
-		os.Exit(1)
+		if filepath.Ext(fi.Name()) == ".tfvars" {
+			varFile = filepath.Join(rootDir, fi.Name())
+		}
+		if filepath.Ext(fi.Name()) == ".tfspec" {
+			specFile = filepath.Join(rootDir, fi.Name())
+		}
+	}
+	if specFile != "" {
+		return &testCase{dir: rootDir, variableFile: varFile, specFile: specFile}
+	}
+	return nil
+}
+
+func fatalReport(name string, err tfdiags.Diagnostics, plan string, reports chan<- *testReport) bool {
+	if err.HasErrors() {
+		reports <- &testReport{name: name, report: err, plan: plan}
+		return true
+	}
+	return false
+}
+
+func printDiags(ctxDiags tfdiags.Diagnostics) {
+	for _, diag := range ctxDiags {
+		if subj := diag.Source().Subject; subj != nil {
+			fmt.Printf("%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
+		}
+		if diag.Description().Summary != "" {
+			fmt.Println(diag.Description().Summary)
+		} else {
+			fmt.Println(diag.Description().Detail)
+		}
 	}
 }

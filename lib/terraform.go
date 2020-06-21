@@ -19,11 +19,7 @@ func NewContext(dir, varFile string) (*terraform.Context, tfdiags.Diagnostics) {
 		diags = diags.Append(err)
 		return nil, diags
 	}
-	absVarFile, err := filepath.Abs(varFile)
-	if err != nil {
-		diags = diags.Append(err)
-		return nil, diags
-	}
+
 	modulesDir := path.Join(absDir, ".terraform/modules")
 	resolver, err := BuildProviderResolver(absDir)
 
@@ -36,13 +32,21 @@ func NewContext(dir, varFile string) (*terraform.Context, tfdiags.Diagnostics) {
 	}
 	cfg, _ := c.LoadConfig(absDir)
 
-	values, hclDiags := c.Parser().LoadValuesFile(absVarFile)
-	if hclDiags.HasErrors() {
-		diags = diags.Append(hclDiags)
-		return nil, diags
-	}
+	var variables terraform.InputValues
+	if varFile != "" {
+		absVarFile, err := filepath.Abs(varFile)
+		if err != nil {
+			diags = diags.Append(err)
+			return nil, diags
+		}
+		values, hclDiags := c.Parser().LoadValuesFile(absVarFile)
+		if hclDiags.HasErrors() {
+			diags = diags.Append(hclDiags)
+			return nil, diags
+		}
 
-	variables := InputValuesFromType(values, terraform.ValueFromNamedFile)
+		variables = InputValuesFromType(values, terraform.ValueFromNamedFile)
+	}
 
 	opts := &terraform.ContextOpts{
 		Config:           cfg,
