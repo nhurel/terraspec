@@ -1,0 +1,10 @@
+assert "ressource_type" "name" {
+    property = "value"
+    inner {
+        inner_prop = "value2"
+    }
+}
+
+refute "output" "name" {
+    value = "value"
+}
