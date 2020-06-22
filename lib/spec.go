@@ -60,7 +60,8 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned output %s : %v", assert.Name, err)
 			}
-			assertDiags := checkAssert(assert.Name, assert.Value, change.Change.After)
+
+			assertDiags := checkOutput(path, assert.Value, change.Change.After)
 			diags = diags.Append(assertDiags)
 		} else {
 			resource := findResource(assert.Key(), plan.Changes.Resources)
@@ -156,6 +157,29 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	}
 
 	return diags
+}
+
+func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+	if !got.CanIterateElements() {
+		diags = diags.Append(ErrorDiags(path, "Cannot parse planned output"))
+		return diags
+	}
+	it := got.ElementIterator()
+	if !it.Next() {
+		diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
+		return diags
+	}
+	_, value := it.Element()
+
+	exp := findAttribute(cty.StringVal("value"), expected)
+	if exp.IsNull() {
+		//should never happen
+		diags = diags.Append(ErrorDiags(path, "Bad Assertion : Assertion on outputs should have a value parameter"))
+		return diags
+	}
+	return checkAssert(path, exp, value)
+
 }
 
 // ReadSpec reads the .tfspec file and returns the resulting Spec or a Diagnostics if error occured in the process
