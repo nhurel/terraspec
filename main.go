@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/mitchellh/cli"
 	"github.com/mitchellh/colorstring"
 	terraspec "github.com/nhurel/terraspec/lib"
+	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -66,7 +68,7 @@ func main() {
 	}()
 
 	for r := range reports {
-		fmt.Printf("REPORT FOR TEST CASE : %s\n", r.name)
+		fmt.Printf("🏷  %s\n", r.name)
 		if r.report.HasErrors() {
 			exitCode = 1
 		}
@@ -173,13 +175,55 @@ func fatalReport(name string, err tfdiags.Diagnostics, plan string, reports chan
 
 func printDiags(ctxDiags tfdiags.Diagnostics) {
 	for _, diag := range ctxDiags {
-		if subj := diag.Source().Subject; subj != nil {
-			fmt.Printf("%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
-		}
-		if diag.Description().Summary != "" {
-			fmt.Println(diag.Description().Summary)
-		} else {
-			fmt.Println(diag.Description().Detail)
+		switch diag.(type) {
+		case terraspec.TerraspecDiagnostic:
+			if diag.Severity() == terraspec.Info {
+				fmt.Print(" ✔  ")
+			} else {
+				fmt.Print(" ❌  ")
+			}
+			if path := tfdiags.GetAttribute(diag); path != nil {
+				colorstring.Printf("[bold]%s ", formatPath(path))
+			}
+			if diag.Severity() == terraspec.Info {
+				colorstring.Printf("= [green]%s\n", diag.Description().Detail)
+			} else {
+				colorstring.Printf(": [red]%s\n", diag.Description().Detail)
+
+			}
+
+		default:
+			if subj := diag.Source().Subject; subj != nil {
+				fmt.Printf("%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
+			}
+
+			if path := tfdiags.GetAttribute(diag); path != nil {
+				fmt.Printf("%s : ", formatPath(path))
+			}
+			if diag.Description().Summary != "" {
+				fmt.Println(diag.Description().Summary)
+			} else {
+				fmt.Println(diag.Description().Detail)
+			}
 		}
 	}
+}
+
+func formatPath(path cty.Path) string {
+	sb := strings.Builder{}
+	for i, pa := range path {
+		switch p := pa.(type) {
+		case cty.GetAttrStep:
+			if i > 0 {
+				sb.WriteRune('.')
+			}
+			sb.WriteString(p.Name)
+		case cty.IndexStep:
+			sb.WriteRune('[')
+			val, _ := p.Key.AsBigFloat().Int64()
+			sb.WriteString(strconv.Itoa(int(val)))
+			sb.WriteRune(']')
+		}
+	}
+	return sb.String()
 }

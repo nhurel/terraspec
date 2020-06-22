@@ -50,8 +50,9 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 	for _, assert := range s.Asserts {
 		if assert.Type == "output" {
 			output := findOuput(assert.Key(), plan.Changes.Outputs)
+			path := cty.Path{}.GetAttr("output").GetAttr(assert.Key())
 			if output == nil {
-				diags = diags.Append(fmt.Errorf("Could not find output %s in changes", assert.Key()))
+				diags = diags.Append(ErrorDiags(path, "Missing value"))
 				continue
 			}
 			// checkValue(assert.Key(), assert.Value, output.Addr.OutputValue)
@@ -76,7 +77,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
 			}
-			assertDiags := checkAssert(assert.Name, assert.Value, change)
+			assertDiags := checkAssert(cty.Path{}.GetAttr(assert.Key()), assert.Value, change)
 			diags = diags.Append(assertDiags)
 		}
 	}
@@ -114,17 +115,19 @@ func findAttribute(key, value cty.Value) cty.Value {
 	return cty.NilVal
 }
 
-func checkAssert(name string, expected, got cty.Value) tfdiags.Diagnostics {
+func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 	if expected.Type().IsPrimitiveType() {
 		if !expected.Equals(got).True() {
-			diags = diags.Append(fmt.Errorf("Expected %s to be '%v' but got '%v'", name, PrimitiveValue(expected), PrimitiveValue(got)))
+			diags = diags.Append(AssertErrorDiags(path, PrimitiveValue(expected), PrimitiveValue(got)))
+		} else {
+			diags = diags.Append(SuccessDiags(path, PrimitiveValue(got)))
 		}
 		return diags
 	}
 	if expected.CanIterateElements() {
 		if !got.CanIterateElements() {
-			diags = diags.Append(fmt.Errorf("Expected to have multiple properties for %s", name))
+			diags = diags.Append(ErrorDiags(path, "Element don't have multiple properties"))
 			return diags
 		}
 
@@ -140,15 +143,14 @@ func checkAssert(name string, expected, got cty.Value) tfdiags.Diagnostics {
 				// looping over an array rather than a map of properties
 				if gt.Next() {
 					_, g := gt.Element()
-					diags = diags.Append(checkAssert(name, value, g))
+					diags = diags.Append(checkAssert(path, value, g)) // path or path.Index ?
 				} else {
-					diags = diags.Append(fmt.Errorf("%s has less children than specified. Could not find children#%d", name, key.AsBigFloat()))
+					diags = diags.Append(ErrorDiags(path, fmt.Sprintf("Could not find children at index %d", key.AsBigFloat())))
 				}
 			} else {
 				g := findAttribute(key, got)
-				diags = diags.Append(checkAssert(key.AsString(), value, g))
+				diags = diags.Append(checkAssert(path.GetAttr(key.AsString()), value, g))
 			}
-
 		}
 		return diags
 	}
