@@ -176,7 +176,7 @@ func fatalReport(name string, err tfdiags.Diagnostics, plan string, reports chan
 func printDiags(ctxDiags tfdiags.Diagnostics) {
 	for _, diag := range ctxDiags {
 		switch diag.(type) {
-		case terraspec.TerraspecDiagnostic:
+		case *terraspec.TerraspecDiagnostic:
 			if diag.Severity() == terraspec.Info {
 				fmt.Print(" ✔  ")
 			} else {
@@ -194,17 +194,14 @@ func printDiags(ctxDiags tfdiags.Diagnostics) {
 
 		default:
 			if subj := diag.Source().Subject; subj != nil {
-				fmt.Printf("%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
+				colorstring.Printf("[bold]%s#%d,%d : ", subj.Filename, subj.Start.Line, subj.Start.Column)
 			}
 
-			if path := tfdiags.GetAttribute(diag); path != nil {
-				fmt.Printf("%s : ", formatPath(path))
-			}
 			if diag.Description().Summary != "" {
-				fmt.Println(diag.Description().Summary)
-			} else {
-				fmt.Println(diag.Description().Detail)
+				colorstring.Printf("[red]%s : ", diag.Description().Summary)
 			}
+			colorstring.Printf("[red]%s\n", diag.Description().Detail)
+
 		}
 	}
 }
