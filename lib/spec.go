@@ -148,9 +148,11 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 				} else {
 					diags = diags.Append(ErrorDiags(path, fmt.Sprintf("Could not find children at index %d", key.AsBigFloat())))
 				}
-			} else {
+			} else if key.Type() == cty.String {
 				g := findAttribute(key, got)
 				diags = diags.Append(checkAssert(path.GetAttr(key.AsString()), value, g))
+			} else if key.CanIterateElements() {
+				diags = diags.Append(checkAssert(path, key, value))
 			}
 		}
 		return diags

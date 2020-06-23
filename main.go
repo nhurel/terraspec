@@ -175,14 +175,14 @@ func fatalReport(name string, err tfdiags.Diagnostics, plan string, reports chan
 
 func printDiags(ctxDiags tfdiags.Diagnostics) {
 	for _, diag := range ctxDiags {
-		switch diag.(type) {
+		switch d := diag.(type) {
 		case *terraspec.TerraspecDiagnostic:
 			if diag.Severity() == terraspec.Info {
 				fmt.Print(" ✔  ")
 			} else {
 				fmt.Print(" ❌  ")
 			}
-			if path := tfdiags.GetAttribute(diag); path != nil {
+			if path := tfdiags.GetAttribute(d.Diagnostic); path != nil {
 				colorstring.Printf("[bold]%s ", formatPath(path))
 			}
 			if diag.Severity() == terraspec.Info {
