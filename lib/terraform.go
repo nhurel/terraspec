@@ -30,7 +30,11 @@ func NewContext(dir, varFile string) (*terraform.Context, tfdiags.Diagnostics) {
 		diags = diags.Append(err)
 		return nil, diags
 	}
-	cfg, _ := c.LoadConfig(absDir)
+	cfg, hclDiag := c.LoadConfig(absDir)
+	if hclDiag.HasErrors() {
+		diags = diags.Append(hclDiag)
+		return nil, diags
+	}
 
 	var variables terraform.InputValues
 	if varFile != "" {
