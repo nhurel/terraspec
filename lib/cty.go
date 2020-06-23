@@ -10,6 +10,9 @@ import (
 // Number will be returned as int
 // If a non primitive is given, nil will be returned
 func PrimitiveValue(val cty.Value) interface{} {
+	if !val.IsKnown() || val.IsNull() {
+		return nil
+	}
 	switch val.Type() {
 	case cty.Bool:
 		return val.True()

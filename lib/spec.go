@@ -119,7 +119,7 @@ func findAttribute(key, value cty.Value) cty.Value {
 func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 	if expected.Type().IsPrimitiveType() {
-		if !expected.Equals(got).True() {
+		if !got.IsKnown() || !expected.Equals(got).True() {
 			diags = diags.Append(AssertErrorDiags(path, PrimitiveValue(expected), PrimitiveValue(got)))
 		} else {
 			diags = diags.Append(SuccessDiags(path, PrimitiveValue(got)))
