@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
@@ -23,8 +24,7 @@ type ProviderResolver struct {
 // BuildProviderResolver returns a ProviderResolver able to find all providers
 // provided by plugins
 func BuildProviderResolver(dir string) (*ProviderResolver, error) {
-	// TODO : linux_amd64 should not be hardcoded and can be different on other platform
-	var pluginDir = path.Join(dir, ".terraform/plugins/linux_amd64")
+	var pluginDir = path.Join(dir, fmt.Sprintf(".terraform/plugins/%s_%s", runtime.GOOS, runtime.GOARCH))
 
 	pluginMetaSet := discovery.FindPlugins(plugin.ProviderPluginName, []string{pluginDir})
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
