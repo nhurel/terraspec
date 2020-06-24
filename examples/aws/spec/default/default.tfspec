@@ -1,0 +1,25 @@
+assert "module.ec2-instance.aws_instance" "this[0]" {
+      associate_public_ip_address  = false
+      disable_api_termination      = false
+      ebs_optimized                = false
+      get_password_data            = false
+      instance_type                = "t2.small"
+      monitoring                   = false
+      source_dest_check            = true
+      subnet_id                    = "mocked_subnet_id"
+      tags                         = {
+                                        "Name" = "my-instance"
+                                        }
+      tenancy                      = "default"
+      volume_tags                  = {
+                                        "Name" = "my-instance"
+                                        }
+      credit_specification {
+        cpu_credits = "standard"
+      }
+}
+
+refute "module.ec2-instance.aws_instance" "this[0]" {
+  // TODO
+  ebs_block_device{}
+}

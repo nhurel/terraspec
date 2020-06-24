@@ -1,0 +1,31 @@
+assert "module.ec2-instance.aws_instance" "this[0]" {
+    associate_public_ip_address = true
+    private_ip = "10.0.0.1"
+    
+    credit_specification {
+        cpu_credits = "standard"
+    }
+    tenancy = "default"
+
+    tags = {
+        "Name" = "my-instance"
+    }
+
+    volume_tags = {
+        "Name" = "my-instance"
+    }
+
+    ebs_block_device {
+          delete_on_termination = true
+          device_name           = "ebs_device"
+          encrypted             = false
+    }
+}
+
+refute "module.ec2-instance.aws_instance" "this[0]" {
+  ebs_block_device{}
+}
+
+assert "output" "private_ip" {
+    value = "10.0.0.1"
+}
