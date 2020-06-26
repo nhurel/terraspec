@@ -1,11 +1,10 @@
-package terraspec_test
+package terraspec
 
 import (
 	"testing"
 
 	"github.com/hashicorp/terraform/configs/configschema"
 	"github.com/hashicorp/terraform/terraform"
-	terraspec "github.com/nhurel/terraspec/lib"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -37,7 +36,7 @@ func TestParsing(t *testing.T) {
 			},
 		},
 	}
-	spec, diags := terraspec.ReadSpec("testdata/scenario.tfspec", schemas)
+	spec, diags := ReadSpec("testdata/scenario.tfspec", schemas)
 	if diags.HasErrors() {
 		t.Fatal(diags.Err())
 	}
