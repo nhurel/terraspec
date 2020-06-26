@@ -11,7 +11,7 @@ import (
 func TestParsing(t *testing.T) {
 	schemas := &terraform.Schemas{
 		Providers: map[string]*terraform.ProviderSchema{
-			"ressource": &terraform.ProviderSchema{
+			"ressource": {
 				ResourceTypes: map[string]*configschema.Block{
 					"ressource_type": {
 						Attributes: map[string]*configschema.Attribute{
