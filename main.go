@@ -21,10 +21,13 @@ import (
 )
 
 var (
-	app = kingpin.New("terraspec", "Unit test terraform config")
+	//Version is the version of the app. This is set at build time
+	Version string
+	app     = kingpin.New("terraspec", "Unit test terraform config")
 	// dir = app.Flag("dir", "path to terraform config dir to test").Default(".").String()
 	specDir     = app.Flag("spec", "path to folder containing test cases").Default("spec").String()
 	displayPlan = app.Flag("display-plan", "Print the full plan before the results").Default("false").Bool()
+	version     = app.Version(Version)
 )
 
 type testCase struct {
