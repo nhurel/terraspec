@@ -15,17 +15,19 @@ type TerraspecDiagnostic struct {
 	tfdiags.Diagnostic
 }
 
+var _ tfdiags.Diagnostic = &TerraspecDiagnostic{}
+
 // SuccessDiags creates a diagnostic at Info level to indicate the user a given assertion matches
-func SuccessDiags(path cty.Path, value interface{}) tfdiags.Diagnostic {
+func SuccessDiags(path cty.Path, value interface{}) *TerraspecDiagnostic {
 	return &TerraspecDiagnostic{tfdiags.AttributeValue(Info, "", fmt.Sprintf("%v", value), path)}
 }
 
 // AssertErrorDiags returns a diagnostic at Error level to indicate the user a given assertion failed
-func AssertErrorDiags(path cty.Path, expected, got interface{}) tfdiags.Diagnostic {
+func AssertErrorDiags(path cty.Path, expected, got interface{}) *TerraspecDiagnostic {
 	return &TerraspecDiagnostic{tfdiags.AttributeValue(tfdiags.Error, "", fmt.Sprintf("%v != %v", got, expected), path)}
 }
 
 // ErrorDiags returns a diagnostic at Error level with given error message
-func ErrorDiags(path cty.Path, detail string) tfdiags.Diagnostic {
+func ErrorDiags(path cty.Path, detail string) *TerraspecDiagnostic {
 	return &TerraspecDiagnostic{tfdiags.AttributeValue(tfdiags.Error, "", detail, path)}
 }
