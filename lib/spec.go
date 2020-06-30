@@ -134,34 +134,26 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 
 		it := expected.ElementIterator()
 		gt := got.ElementIterator()
-		childNb := 0
+		childIndex := 0
 		for it.Next() {
 			key, value := it.Element()
 			if IsNull(value) {
 				continue //skip attributes with no spec
 			}
-
-			if key.Type() == cty.Number {
-				// looping over an array rather than a map of properties
-				if gt.Next() {
-					_, g := gt.Element()
-					diags = diags.Append(checkAssert(path.Index(key), value, g)) // path or path.Index ?
-				} else {
-					diags = diags.Append(ErrorDiags(path.Index(key), fmt.Sprintf("Could not find child at index %d", PrimitiveValue(key))))
-				}
-			} else if key.Type() == cty.String {
+			if key.Type() == cty.String {
+				// Looping over object properties or a map
 				g := findAttribute(key, got)
 				diags = diags.Append(checkAssert(path.GetAttr(key.AsString()), value, g))
-			} else if key.CanIterateElements() {
-				// looping over a set:
+			} else {
+				// looping over a set or an array:
 				if gt.Next() {
 					_, g := gt.Element()
-					diags = diags.Append(checkAssert(path.Index(cty.NumberIntVal(int64(childNb))), value, g))
+					diags = diags.Append(checkAssert(path.Index(cty.NumberIntVal(int64(childIndex))), value, g))
 				} else {
-					diags = diags.Append(ErrorDiags(path.Index(cty.NumberIntVal(int64(childNb))), fmt.Sprintf("Could not find child at index %d", childNb)))
+					diags = diags.Append(ErrorDiags(path.Index(cty.NumberIntVal(int64(childIndex))), fmt.Sprintf("Could not find child at index %d", childIndex)))
 				}
 			}
-			childNb++
+			childIndex++
 		}
 		return diags
 	}
