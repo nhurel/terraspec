@@ -279,5 +279,60 @@ func TestCheckAssert(t *testing.T) {
 }
 
 func TestCheckOutput(t *testing.T) {
-	// t.Fatal("Not implemented")
+
+	var path = cty.Path{}.GetAttr("test").GetAttr("output_value")
+	var tests = map[string]struct {
+		given    cty.Value
+		expected *TerraspecDiagnostic
+	}{
+		"goodOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"value": cty.StringVal("good-result"),
+			}),
+			expected: SuccessDiags(path, "good-result"),
+		},
+		"wrongOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"value": cty.StringVal("wrong-result"),
+			}),
+			expected: AssertErrorDiags(path, "wrong-result", "good-result"),
+		},
+		"badOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"novalue": cty.StringVal("no value !"),
+			}),
+			expected: ErrorDiags(path, "Bad Assertion : Assertion on outputs should have a value parameter"),
+		},
+	}
+
+	var output = cty.TupleVal([]cty.Value{cty.StringVal("good-result")})
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := checkOutput(path, tt.given, output)
+			if nb := len(result); nb != 1 {
+				t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
+				if nb == 0 {
+					return
+				}
+			}
+			if result[0].Description().Detail != tt.expected.Description().Detail {
+				t.Errorf("Wrong Details. Got %+v want %+v", result[0].Description().Detail, tt.expected.Description().Detail)
+			}
+			if result[0].Severity() != tt.expected.Severity() {
+				t.Errorf("Wrong severity. Got [%c] - Want [%c]", result[0].Severity(), tt.expected.Severity())
+			}
+			if r, ok := result[0].(*TerraspecDiagnostic); ok {
+				e := tfdiags.GetAttribute(tt.expected.Diagnostic)
+				g := tfdiags.GetAttribute(r.Diagnostic)
+				if !e.Equals(g) {
+					t.Errorf("Wrong attribute. Got %v - Want %v", g, e)
+				}
+			} else {
+				t.Errorf("checkOutput diagnostic is not a TerraspecDiagnostic. Got %T", result[0])
+			}
+
+		})
+	}
+
 }

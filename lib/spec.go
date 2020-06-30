@@ -55,7 +55,6 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 				diags = diags.Append(ErrorDiags(path, "Missing value"))
 				continue
 			}
-			// checkValue(assert.Key(), assert.Value, output.Addr.OutputValue)
 			change, err := output.Decode()
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned output %s : %v", assert.Name, err)
