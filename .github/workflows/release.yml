@@ -1,0 +1,54 @@
+name: Release
+on:
+    push:
+        tags: [*]
+defaults:
+    run:
+        shell: bash
+jobs:
+    release:
+        name: release
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v2
+            - name: Run tests
+              run: make test
+            - name: Build artifacts
+              run: make distrib
+            - name: Create release
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                tag_name: ${{ github.ref }}
+                release_name: ${{ github.ref }}
+                draft: true
+            - name: Upload linux asset
+              uses: actions/upload-release-asset@v1
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: ${{ steps.create_release.outputs.upload_url }}
+                asset_path: dist/terraspec-linux-x64
+                asset_name: terraspec-linux-x64
+                asset_content_type: application/octet-stream
+            - name: Upload windows asset
+              uses: actions/upload-release-asset@v1
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: ${{ steps.create_release.outputs.upload_url }}
+                asset_path: dist/terraspec-windows.exe
+                asset_name: terraspec-windows.exe
+                asset_content_type: application/octet-stream
+            - name: Upload mac asset
+              uses: actions/upload-release-asset@v1
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: ${{ steps.create_release.outputs.upload_url }}
+                asset_path: dist/terraspec-darwin
+                asset_name: terraspec-darwin
+                asset_content_type: application/octet-stream
