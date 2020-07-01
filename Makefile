@@ -14,6 +14,12 @@ all: clean fmt vet test $(BINARY) install
 $(BINARY): $(SOURCES)
 	CGO_ENABLED=0 go build -a -installsuffix cgo -o $(BINARY) -ldflags "-s -X main.Version=$(git_tag)" .
 
+distrib:
+	rm -rf dist && mkdir -p dist
+	docker run --rm -v "$$PWD":/go/src/github.com/nhurel/terraspec -w /go/src/github.com/nhurel/terraspec -e GOOS=windows -e GOARCH=amd64 golang:1.14.4 go build -o dist/$(BINARY)-windows.exe -ldflags "-s -X main.Version=$(git_tag)"
+	docker run --rm -v "$$PWD":/go/src/github.com/nhurel/terraspec -w /go/src/github.com/nhurel/terraspec -e GOOS=linux -e GOARCH=amd64 golang:1.14.4 go build -o dist/$(BINARY)-linux-x64 -ldflags "-s -X main.Version=$(git_tag)"
+	docker run --rm -v "$$PWD":/go/src/github.com/nhurel/terraspec -w /go/src/github.com/nhurel/terraspec -e GOOS=darwin -e GOARCH=amd64 golang:1.14.4 go build -o dist/$(BINARY)-darwin -ldflags "-s -X main.Version=$(git_tag)"
+
 install: $(BINARY)
 	CGO_ENABLED=0 go install -installsuffix cgo -ldflags "-s -X main.Version=$(git_tag)"
 
