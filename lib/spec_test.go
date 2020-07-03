@@ -35,6 +35,17 @@ func TestParsing(t *testing.T) {
 					"ressource_type": 0,
 				},
 			},
+			"data": {
+				DataSources: map[string]*configschema.Block{
+					"data_type": {
+						Attributes: map[string]*configschema.Attribute{
+							"query": {Type: cty.Number},
+							"id":    {Type: cty.Number},
+							"name":  {Type: cty.String},
+						},
+					},
+				},
+			},
 		},
 	}
 	spec, diags := ReadSpec("testdata/scenario.tfspec", schemas)
@@ -85,6 +96,38 @@ func TestParsing(t *testing.T) {
 		})
 		if !refute.Value.RawEquals(expected) {
 			t.Errorf("refute.Value not as expected. \nGot %s\nWant %s", refute.Value.GoString(), expected.GoString())
+		}
+	}
+
+	if nb := len(spec.Mocks); nb != 1 {
+		t.Errorf("Spec should have 1 mock. Got %d", nb)
+	} else {
+		mock := spec.Mocks[0]
+		if mock.Type != "data_type" {
+			t.Errorf("refute type is wrong. Got %s", mock.Type)
+		}
+		if mock.Name != "name" {
+			t.Errorf("refute name is wrong. Got %s", mock.Name)
+		}
+		expectedData := cty.ObjectVal(
+			map[string]cty.Value{
+				"id":    cty.NumberIntVal(12345),
+				"name":  cty.StringVal("fetched_data"),
+				"query": cty.NumberIntVal(12345),
+			},
+		)
+		if !mock.Data.RawEquals(expectedData) {
+			t.Errorf("mock.Data not as expected. \nGot %s\nWant %s", mock.Data.GoString(), expectedData.GoString())
+		}
+		expectedQuery := cty.ObjectVal(
+			map[string]cty.Value{
+				"query": cty.NumberIntVal(12345),
+				"id":    cty.NullVal(cty.Number),
+				"name":  cty.NullVal(cty.String),
+			},
+		)
+		if !mock.Query.RawEquals(expectedQuery) {
+			t.Errorf("mock.Query not as expected. \nGot %s\nWant %s", mock.Query.GoString(), expectedQuery.GoString())
 		}
 	}
 }

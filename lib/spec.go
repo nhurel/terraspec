@@ -22,6 +22,7 @@ import (
 type Spec struct {
 	Asserts []*Assert
 	Refutes []*Assert
+	Mocks   []*Mock
 }
 
 // Assert struct contains the definition of an assertion
@@ -29,6 +30,12 @@ type Assert struct {
 	Type  string
 	Name  string
 	Value cty.Value
+}
+type Mock struct {
+	Type  string
+	Name  string
+	Query cty.Value
+	Data  cty.Value
 }
 
 // Key return fully qualified name of an Assert
@@ -204,9 +211,15 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Config    hcl.Body       `hcl:",remain"`
 		DependsOn hcl.Expression `hcl:"depends_on,attr"`
 	}
+	type mock struct {
+		Type   string   `hcl:"type,label"`
+		Name   string   `hcl:"name,label"`
+		Config hcl.Body `hcl:",remain"`
+	}
 	type root struct {
 		Asserts []*assert `hcl:"assert,block"`
 		Refutes []*assert `hcl:"refute,block"`
+		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
 	}
 
@@ -239,6 +252,13 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		}
 		parsed.Refutes = append(parsed.Refutes, &Assert{Name: assert.Name, Type: assert.Type, Value: val})
 	}
+	for _, mock := range r.Mocks {
+		query, mocked, diags := decodeMockBody(mock.Config, mock.Type, schemas)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		parsed.Mocks = append(parsed.Mocks, &Mock{Name: mock.Name, Type: mock.Type, Query: query, Data: mocked})
+	}
 
 	return parsed, diags
 }
@@ -263,6 +283,37 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 	return val, diags
 }
 
+func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, mock cty.Value, diags hcl.Diagnostics) {
+	var codedMock hcl.Body
+	provName := strings.Split(bodyType, "_")[0]
+	schema := schemas.ProviderSchema(provName)
+	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
+
+	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)
+	if diags.HasErrors() {
+		return
+	}
+	mockedSchema := toMockSchema(partialSchema)
+	mock, moreDiags := hcldec.Decode(codedMock, mockedSchema.DecoderSpec(), nil)
+	diags = append(diags, moreDiags...)
+	if diags.HasErrors() {
+		return
+	}
+	mock = mock.GetAttr("mock")
+
+	mock, err := cty.Transform(mock, func(path cty.Path, value cty.Value) (cty.Value, error) {
+		if value.IsNull() {
+			return path.Apply(query)
+		}
+		return value, nil
+	})
+	if err != nil {
+		diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Detail: err.Error()})
+	}
+
+	return
+}
+
 // Extract the resource type from a fully qualified resource name, eg module.name.resourceType
 func resourceType(fullName string) string {
 	parts := strings.Split(fullName, ".")
@@ -276,4 +327,16 @@ func laxSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
 		laxed.ResourceTypes[k] = rt.NoneRequired()
 	}
 	return laxed
+}
+func toMockSchema(schema *configschema.Block) *configschema.Block {
+	mocked := &configschema.Block{
+		BlockTypes: map[string]*configschema.NestedBlock{
+			"mock": {
+				Block:   *schema,
+				Nesting: configschema.NestingSingle,
+			},
+		},
+	}
+
+	return mocked
 }
