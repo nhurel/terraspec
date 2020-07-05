@@ -329,10 +329,11 @@ func laxSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
 	return laxed
 }
 func toMockSchema(schema *configschema.Block) *configschema.Block {
+	laxed := schema.NoneRequired()
 	mocked := &configschema.Block{
 		BlockTypes: map[string]*configschema.NestedBlock{
 			"mock": {
-				Block:   *schema,
+				Block:   *laxed,
 				Nesting: configschema.NestingSingle,
 			},
 		},

@@ -1,3 +1,24 @@
+mock "aws_vpcs" "selected" {
+  tags = {
+    service = "secure"
+  }
+  mock{
+    ids = ["mocked_vpc_id"]
+  }
+}
+
+mock "aws_subnet_ids" "secure" {
+  vpc_id = "mocked_vpc_id"
+
+  tags = {
+    Tier = "Private"
+  }
+
+  mock{
+    ids = ["mocked_subnet_id"]
+  }
+}
+
 assert "module.ec2-instance.aws_instance" "this[0]" {
     associate_public_ip_address = true
     private_ip = "10.0.0.1"

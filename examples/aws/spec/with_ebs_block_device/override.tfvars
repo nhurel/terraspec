@@ -1,6 +1,4 @@
 associate_public_ip_address = true
-vpc_ids = ["mocked_vpc_id"]
-subnet_ids = ["mocked_subnet_id"]
 private_ip = "10.0.0.1"
 
 ebs_block_device = [

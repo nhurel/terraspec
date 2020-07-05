@@ -14,11 +14,35 @@ import (
 	"github.com/hashicorp/terraform/plugin"
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/providers"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // ProviderResolver implements terraform's providers.Resolver interface
 type ProviderResolver struct {
-	KnownPlugins map[addrs.Provider]discovery.PluginMeta
+	KnownPlugins     map[addrs.Provider]discovery.PluginMeta
+	DataSourceReader *MockDataSourceReader
+}
+
+// MockDataSourceReader can mock a call to ReadDataSource and return appropriate mocked data
+type MockDataSourceReader struct {
+	mockDataSources []*Mock
+}
+
+// SetMock populates mock data
+func (m *MockDataSourceReader) SetMock(mocks []*Mock) {
+	m.mockDataSources = mocks
+}
+
+// ReadDataSource returns a mock response for the datasource call
+func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
+	var mockedResult cty.Value = config
+	for _, mock := range m.mockDataSources {
+		if mock.Query.RawEquals(config) {
+			mockedResult = mock.Data
+			break
+		}
+	}
+	return mockedResult
 }
 
 // BuildProviderResolver returns a ProviderResolver able to find all providers
@@ -32,7 +56,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	for k := range pluginMetaSet {
 		pluginsSchema[addrs.NewLegacyProvider(k.Name)] = k
 	}
-	return &ProviderResolver{KnownPlugins: pluginsSchema}, nil
+	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
 }
 
 func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
@@ -61,24 +85,25 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 func (r *ProviderResolver) ResolveProviders(reqd discovery.PluginRequirements) (map[addrs.Provider]providers.Factory, []error) {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
-		result[k] = buildFactory(p)
+		result[k] = buildFactory(p, r.DataSourceReader)
 	}
 	return result, nil
 }
 
-func buildFactory(p discovery.PluginMeta) providers.Factory {
+func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader) providers.Factory {
 	return func() (providers.Interface, error) {
 
-		return &ProviderInterface{pluginMeta: p}, nil
+		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider}, nil
 	}
 }
 
 // ProviderInterface implements providers.Interface for the purpose of
 // testing described config
 type ProviderInterface struct {
-	pluginMeta discovery.PluginMeta
-	_plugin    *plugin.GRPCProvider
-	lock       sync.Mutex
+	pluginMeta         discovery.PluginMeta
+	dataSourceProvider *MockDataSourceReader
+	_plugin            *plugin.GRPCProvider
+	lock               sync.Mutex
 }
 
 func (m *ProviderInterface) plugin() (*plugin.GRPCProvider, error) {
@@ -115,6 +140,7 @@ func (m *ProviderInterface) GetSchema() providers.GetSchemaResponse {
 	} else {
 		s = p.GetSchema()
 	}
+
 	return s
 }
 
@@ -208,7 +234,8 @@ func (m *ProviderInterface) ImportResourceState(req providers.ImportResourceStat
 
 // ReadDataSource returns the data source's current state.
 func (m *ProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
-	return providers.ReadDataSourceResponse{}
+	mockedResult := m.dataSourceProvider.ReadDataSource(req.Config)
+	return providers.ReadDataSourceResponse{State: mockedResult}
 }
 
 // Close shuts down the plugin process if applicable.

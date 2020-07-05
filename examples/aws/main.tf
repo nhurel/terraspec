@@ -32,15 +32,11 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
+
 data "aws_vpcs" "selected" {
   tags = {
     service = "secure"
   }
-}
-
-locals {
-  vpc_ids = coalesce(tolist(var.vpc_ids), data.aws_vpcs.selected.ids)
-  subnet_ids = coalesce(tolist(var.subnet_ids), data.aws_subnet_ids.secure.ids)
 }
 
 data "aws_security_groups" "secure" {
@@ -50,12 +46,12 @@ data "aws_security_groups" "secure" {
   }
   filter {
     name   = "vpc-id"
-    values = local.vpc_ids
+    values = data.aws_vpcs.selected.ids
   }
 }
 
 data "aws_subnet_ids" "secure" {
-  vpc_id = local.vpc_ids[0]
+  vpc_id = element(tolist(data.aws_vpcs.selected.ids), 0)
 
   tags = {
     Tier = "Private"
@@ -73,7 +69,7 @@ module "ec2-instance" {
 
   name                   = var.instance_name
   private_ip             = var.private_ip
-  subnet_id              = local.subnet_ids[0]
+  subnet_id              = element(tolist(data.aws_subnet_ids.secure.ids), 0)
   vpc_security_group_ids = data.aws_security_groups.secure.ids
   ebs_block_device = var.ebs_block_device
 }

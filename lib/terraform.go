@@ -1,6 +1,7 @@
 package terraspec
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 
@@ -10,9 +11,9 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// NewContext creates a new terraform.Context able to compute configs in the context of terraspec
-// It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string) (*terraform.Context, tfdiags.Diagnostics) {
+// NewContextOptions creates a new terraform.ContextOptions able to compute configs in the context of terraspec
+// It returns the built ContextOption or a Diagnostics if error occured
+func NewContextOptions(dir, varFile string) (*terraform.ContextOpts, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -60,7 +61,7 @@ func NewContext(dir, varFile string) (*terraform.Context, tfdiags.Diagnostics) {
 		Variables:        variables,
 	}
 
-	return terraform.NewContext(opts)
+	return opts, nil
 }
 
 // InputValuesFromType converts a map of values file into InputValues with the given SourceType
@@ -73,4 +74,16 @@ func InputValuesFromType(values map[string]cty.Value, sourceType terraform.Value
 		}
 	}
 	return vals
+}
+
+// InjectMockedData will update the ProviderResolver set in this tfOption to populate mock data
+func InjectMockedData(tfOptions *terraform.ContextOpts, mocks []*Mock) tfdiags.Diagnostics {
+	var ctxDiags tfdiags.Diagnostics
+	pr, ok := tfOptions.ProviderResolver.(*ProviderResolver)
+	if !ok {
+		ctxDiags = ctxDiags.Append(fmt.Errorf("ProviderResolver is not terraspec's implementation : %T", tfOptions.ProviderResolver))
+		return ctxDiags
+	}
+	pr.DataSourceReader.SetMock(mocks)
+	return ctxDiags
 }

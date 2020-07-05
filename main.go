@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform/backend/local"
 	"github.com/hashicorp/terraform/helper/logging"
+	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/mitchellh/cli"
 	"github.com/mitchellh/colorstring"
@@ -84,14 +85,42 @@ func main() {
 }
 
 func runTestCase(tc *testCase, results chan<- *testReport) {
-	// Disable terraform verbose logging except if TF_LOF is set
+	// Disable terraform verbose logging except if TF_LOG is set
 	logging.SetOutput()
 	var planOutput string
 
-	tfCtx, ctxDiags := terraspec.NewContext(".", tc.variableFile) // Setting a different folder works to parse configuration but not the modules :/
+	tfOptions, ctxDiags := terraspec.NewContextOptions(".", tc.variableFile) // Setting a different folder works to parse configuration but not the modules :/
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
+
+	//Create tfCtx first to be able to parse specs
+	tfCtx, ctxDiags := terraform.NewContext(tfOptions)
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
+
+	// Parse specs may return mocked data source result
+	spec, ctxDiags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
+
+	//If spec contains mocked data source results, they must be injected in TF
+	if len(spec.Mocks) > 0 {
+		ctxDiags = terraspec.InjectMockedData(tfOptions, spec.Mocks)
+		if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+			return
+		}
+	}
+
+	//Refresh is required to have datasources read
+	_, ctxDiags = tfCtx.Refresh()
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
+
+	// Finally, compute the terraform plan
 	plan, ctxDiags := tfCtx.Plan()
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
@@ -111,10 +140,6 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 	}
 	logging.SetOutput()
 
-	spec, ctxDiags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
-	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
-		return
-	}
 	ctxDiags, err := spec.Validate(plan)
 	if err != nil {
 		// TODO manage this error by returning a report with an error diagnostic
