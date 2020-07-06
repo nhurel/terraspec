@@ -11,7 +11,7 @@ refute "output" "name" {
 
 mock "data_type" "name"{
     query = 12345
-    mock {
+    return {
         id = 12345
         name = "fetched_data"
     }

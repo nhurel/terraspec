@@ -299,7 +299,7 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) 
 	if diags.HasErrors() {
 		return
 	}
-	mock = mock.GetAttr("mock")
+	mock = mock.GetAttr("return")
 
 	mock, err := cty.Transform(mock, func(path cty.Path, value cty.Value) (cty.Value, error) {
 		if value.IsNull() {
@@ -332,7 +332,7 @@ func toMockSchema(schema *configschema.Block) *configschema.Block {
 	laxed := schema.NoneRequired()
 	mocked := &configschema.Block{
 		BlockTypes: map[string]*configschema.NestedBlock{
-			"mock": {
+			"return": {
 				Block:   *laxed,
 				Nesting: configschema.NestingSingle,
 			},

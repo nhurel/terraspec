@@ -2,7 +2,7 @@ mock "aws_vpcs" "selected" {
   tags = {
     service = "secure"
   }
-  mock{
+  return {
     ids = ["12345"]
   }
 }
@@ -14,7 +14,7 @@ mock "aws_subnet_ids" "secure" {
     Tier = "Private"
   }
 
-  mock{
+  return {
     ids = ["mocked_subnet_id"]
   }
 }
@@ -26,7 +26,7 @@ mock "terraform_remote_state" "vpc"{
      key    = "path/to/my/key"
      region = "us-east-1"
   }
-  mock{
+  return {
     outputs = {
       security_groups = ["123"]
     }
