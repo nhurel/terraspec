@@ -36,11 +36,23 @@ type Mock struct {
 	Name  string
 	Query cty.Value
 	Data  cty.Value
+	calls int
 }
 
 // Key return fully qualified name of an Assert
 func (a *Assert) Key() string {
 	return fmt.Sprintf("%s.%s", a.Type, a.Name)
+}
+
+// Call marks the mock as called and returns its data
+func (m *Mock) Call() cty.Value {
+	m.calls++
+	return m.Data
+}
+
+// Called indicates if mock was called at least once
+func (m *Mock) Called() bool {
+	return m.calls > 0
 }
 
 // Validate checks all the assertions of this Spec against the given terraform Plan.
@@ -86,6 +98,12 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 			}
 			assertDiags := checkAssert(cty.Path{}.GetAttr(assert.Key()), assert.Value, change)
 			diags = diags.Append(assertDiags)
+		}
+	}
+
+	for _, mock := range s.Mocks {
+		if !mock.Called() {
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("Expected data to be called with %v", mock.Query.GoString())))
 		}
 	}
 

@@ -39,7 +39,7 @@ func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
 	var mockedResult cty.Value = config
 	for _, mock := range m.mockDataSources {
 		if mock.Query.RawEquals(config) {
-			mockedResult = mock.Data
+			mockedResult = mock.Call()
 			break
 		}
 	}

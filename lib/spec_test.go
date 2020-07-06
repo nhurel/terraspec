@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform/configs/configschema"
+	"github.com/hashicorp/terraform/plans"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/zclconf/go-cty/cty"
@@ -295,23 +296,7 @@ func TestCheckAssert(t *testing.T) {
 			t.Errorf("Missing diag#%d : %s", i, diag.Description().Detail)
 			continue
 		}
-		if result[i].Description().Detail != diag.Description().Detail {
-			t.Errorf("Wrong Details for diag#%d Got %+v want %+v", i, result[i].Description().Detail, diag.Description().Detail)
-		}
-		if result[i].Severity() != diag.Severity() {
-			t.Errorf("Diagnostic#%d has wrong severity. Got [%c] - Want [%c]", i, result[i].Severity(), diag.Severity())
-		}
-		if d, ok := diag.(*TerraspecDiagnostic); ok {
-			if r, ok := result[i].(*TerraspecDiagnostic); ok {
-				e := tfdiags.GetAttribute(d.Diagnostic)
-				g := tfdiags.GetAttribute(r.Diagnostic)
-				if !e.Equals(g) {
-					t.Errorf("Diagnostic#%d has wrong attribute. Got %v - Want %v", i, g, e)
-				}
-			} else {
-				t.Errorf("diag #%d is not a TerraspecDiagnostic. Got %T", i, result[i])
-			}
-		}
+		testDiagnostic(t, result[i], diag)
 	}
 	for i, diag := range result {
 		if i >= len(expectedResult) {
@@ -359,23 +344,83 @@ func TestCheckOutput(t *testing.T) {
 					return
 				}
 			}
-			if result[0].Description().Detail != tt.expected.Description().Detail {
-				t.Errorf("Wrong Details. Got %+v want %+v", result[0].Description().Detail, tt.expected.Description().Detail)
-			}
-			if result[0].Severity() != tt.expected.Severity() {
-				t.Errorf("Wrong severity. Got [%c] - Want [%c]", result[0].Severity(), tt.expected.Severity())
-			}
-			if r, ok := result[0].(*TerraspecDiagnostic); ok {
-				e := tfdiags.GetAttribute(tt.expected.Diagnostic)
-				g := tfdiags.GetAttribute(r.Diagnostic)
-				if !e.Equals(g) {
-					t.Errorf("Wrong attribute. Got %v - Want %v", g, e)
-				}
-			} else {
-				t.Errorf("checkOutput diagnostic is not a TerraspecDiagnostic. Got %T", result[0])
-			}
-
+			testDiagnostic(t, result[0], tt.expected)
 		})
 	}
 
+}
+
+func testDiagnostic(t *testing.T, got, expected tfdiags.Diagnostic) {
+	t.Helper()
+	if got.Description().Detail != expected.Description().Detail {
+		t.Errorf("Wrong Details. Got %+v want %+v", got.Description().Detail, expected.Description().Detail)
+	}
+	if got.Severity() != expected.Severity() {
+		t.Errorf("Wrong severity. Got [%c] - Want [%c]", got.Severity(), expected.Severity())
+	}
+	if ex, ok := expected.(*TerraspecDiagnostic); ok {
+		if r, ok := got.(*TerraspecDiagnostic); ok {
+			e := tfdiags.GetAttribute(ex.Diagnostic)
+			g := tfdiags.GetAttribute(r.Diagnostic)
+			if !e.Equals(g) {
+				t.Errorf("Wrong attribute. Got %v - Want %v", g, e)
+			}
+		} else {
+			t.Errorf("diagnostic is not a TerraspecDiagnostic. Got %T", got)
+		}
+	}
+}
+
+func TestValidateMocks(t *testing.T) {
+	var tests = map[string]struct {
+		given    *Spec
+		expected tfdiags.Diagnostic
+	}{
+		"not called": {
+			given: &Spec{
+				Mocks: []*Mock{
+					{Name: "uncalled",
+						Type: "data_not_called",
+						Query: cty.ObjectVal(map[string]cty.Value{
+							"id":     cty.NumberIntVal(123456),
+							"region": cty.StringVal("us-east-1"),
+						}),
+					},
+				},
+			},
+			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), `Expected data to be called with cty.ObjectVal(map[string]cty.Value{"id":cty.NumberIntVal(123456), "region":cty.StringVal("us-east-1")})`),
+		},
+		"called": {
+			given: &Spec{
+				Mocks: []*Mock{
+					{Name: "called",
+						Type: "data_called",
+						Query: cty.ObjectVal(map[string]cty.Value{
+							"id":     cty.NumberIntVal(123456),
+							"region": cty.StringVal("us-east-1"),
+						}),
+						calls: 1,
+					},
+				},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := tt.given.Validate(&plans.Plan{Changes: &plans.Changes{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.expected == nil && len(got) > 0 {
+				t.Fatalf("Unexpected diagnostic return %v", got[0])
+			}
+			if tt.expected != nil {
+				if len(got) != 1 {
+					t.Fatalf("Expected only 1 diagnostic. Got %d", len(got))
+				}
+				testDiagnostic(t, got[0], tt.expected)
+			}
+		})
+	}
 }
