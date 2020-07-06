@@ -89,30 +89,7 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 	logging.SetOutput()
 	var planOutput string
 
-	tfOptions, ctxDiags := terraspec.NewContextOptions(".", tc.variableFile) // Setting a different folder works to parse configuration but not the modules :/
-	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
-		return
-	}
-
-	//Create tfCtx first to be able to parse specs
-	tfCtx, ctxDiags := terraform.NewContext(tfOptions)
-	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
-		return
-	}
-
-	// Parse specs may return mocked data source result
-	spec, ctxDiags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
-	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
-		return
-	}
-
-	//If spec contains mocked data source results, they must be injected in TF
-	if len(spec.Mocks) > 0 {
-		ctxDiags = terraspec.InjectMockedData(tfOptions, spec.Mocks)
-		if fatalReport(tc.name(), ctxDiags, planOutput, results) {
-			return
-		}
-	}
+	tfCtx, spec, ctxDiags := PrepareTestSuite(".", tc)
 
 	//Refresh is required to have datasources read
 	_, ctxDiags = tfCtx.Refresh()
@@ -146,6 +123,43 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 		log.Fatal(err)
 	}
 	results <- &testReport{name: tc.name(), report: ctxDiags, plan: planOutput}
+}
+
+// PrepareTestSuite builds the terraform.Context that can compute the plan in given dir
+// and parses the spec file containing all assertions. Returned diagnostics may contain errors
+func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.Spec, tfdiags.Diagnostics) {
+	var ctxDiags tfdiags.Diagnostics
+
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		ctxDiags = ctxDiags.Append(err)
+		return nil, nil, ctxDiags
+
+	}
+	providerResolver, err := terraspec.BuildProviderResolver(absDir)
+	if err != nil {
+		ctxDiags = ctxDiags.Append(err)
+		return nil, nil, ctxDiags
+	}
+
+	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver) // Setting a different folder works to parse configuration but not the modules :/
+	ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
+	// Parse specs may return mocked data source result
+	spec, diags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
+	ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
+	//If spec contains mocked data source results, they must be provided to the DataSourceReader
+	if len(spec.Mocks) > 0 {
+		providerResolver.DataSourceReader.SetMock(spec.Mocks)
+	}
+	return tfCtx, spec, ctxDiags
 }
 
 func findCases(rootDir string) []*testCase {
