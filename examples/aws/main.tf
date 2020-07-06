@@ -2,13 +2,14 @@ provider "aws" {
   region = "eu-west-1"
 }
 
-# terraform {
-#   backend "s3" {
-#     bucket = "mybucket"
-#     key    = "path/to/my/key"
-#     region = "us-east-1"
-#   }
-# }
+data "terraform_remote_state" "vpc" {
+   backend = "s3"
+   config = {
+     bucket = "mybucket"
+     key    = "path/to/my/key"
+     region = "us-east-1"
+   }
+ }
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -32,21 +33,9 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-
 data "aws_vpcs" "selected" {
   tags = {
     service = "secure"
-  }
-}
-
-data "aws_security_groups" "secure" {
-  filter {
-    name   = "group-name"
-    values = ["private"]
-  }
-  filter {
-    name   = "vpc-id"
-    values = data.aws_vpcs.selected.ids
   }
 }
 
@@ -70,7 +59,7 @@ module "ec2-instance" {
   name                   = var.instance_name
   private_ip             = var.private_ip
   subnet_id              = element(tolist(data.aws_subnet_ids.secure.ids), 0)
-  vpc_security_group_ids = data.aws_security_groups.secure.ids
+  vpc_security_group_ids = data.terraform_remote_state.vpc.outputs.security_groups
   ebs_block_device = var.ebs_block_device
 }
 

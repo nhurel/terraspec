@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/terraform/addrs"
+	terraformProvider "github.com/hashicorp/terraform/builtin/providers/terraform"
 	"github.com/hashicorp/terraform/plugin"
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/providers"
@@ -87,13 +88,21 @@ func (r *ProviderResolver) ResolveProviders(reqd discovery.PluginRequirements) (
 	for k, p := range r.KnownPlugins {
 		result[k] = buildFactory(p, r.DataSourceReader)
 	}
+
+	tfProvider := terraformProvider.NewProvider()
+	result[addrs.NewLegacyProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
 	return result, nil
 }
 
 func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader) providers.Factory {
 	return func() (providers.Interface, error) {
-
 		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider}, nil
+	}
+}
+
+func buildWrappedFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, wrapped providers.Interface) providers.Factory {
+	return func() (providers.Interface, error) {
+		return &WrappedProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider, wrapped: wrapped}, nil
 	}
 }
 
@@ -251,4 +260,96 @@ func (m *ProviderInterface) Close() error {
 		m.lock.Unlock()
 	}
 	return nil
+}
+
+// WrappedProviderInterface implements providers.Interface by wrapping a true
+// provider.Interface and only call allowed method
+type WrappedProviderInterface struct {
+	pluginMeta         discovery.PluginMeta
+	dataSourceProvider *MockDataSourceReader
+	wrapped            providers.Interface
+}
+
+// GetSchema returns the complete schema for the provider.
+func (w *WrappedProviderInterface) GetSchema() providers.GetSchemaResponse {
+	return w.wrapped.GetSchema()
+}
+
+// PrepareProviderConfig allows the provider to validate the configuration
+// values, and set or override any values with defaults.
+func (w *WrappedProviderInterface) PrepareProviderConfig(req providers.PrepareProviderConfigRequest) providers.PrepareProviderConfigResponse {
+	return w.wrapped.PrepareProviderConfig(req)
+}
+
+// ValidateResourceTypeConfig allows the provider to validate the resource
+// configuration values.
+func (w *WrappedProviderInterface) ValidateResourceTypeConfig(req providers.ValidateResourceTypeConfigRequest) providers.ValidateResourceTypeConfigResponse {
+	return w.wrapped.ValidateResourceTypeConfig(req)
+}
+
+// ValidateDataSourceConfig allows the provider to validate the data source
+// configuration values.
+func (w *WrappedProviderInterface) ValidateDataSourceConfig(req providers.ValidateDataSourceConfigRequest) providers.ValidateDataSourceConfigResponse {
+	return providers.ValidateDataSourceConfigResponse{}
+}
+
+// UpgradeResourceState is called when the state loader encounters an
+// instance state whose schema version is less than the one reported by the
+// currently-used version of the corresponding provider, and the upgraded
+// result is used for any further processing.
+func (w *WrappedProviderInterface) UpgradeResourceState(req providers.UpgradeResourceStateRequest) providers.UpgradeResourceStateResponse {
+	return w.wrapped.UpgradeResourceState(req)
+}
+
+// Configure configures and initialized the provider.
+func (w *WrappedProviderInterface) Configure(req providers.ConfigureRequest) providers.ConfigureResponse {
+	return providers.ConfigureResponse{}
+}
+
+// Stop is called when the provider should halt any in-flight actions.
+//
+// Stop should not block waiting for in-flight actions to complete. It
+// should take any action it wants and return immediately acknowledging it
+// has received the stop request. Terraform will not make any further API
+// calls to the provider after Stop is called.
+//
+// The error returned, if non-nil, is assumed to mean that signaling the
+// stop somehow failed and that the user should expect potentially waiting
+// a longer period of time.
+func (w *WrappedProviderInterface) Stop() error {
+	return w.wrapped.Stop()
+}
+
+// ReadResource refreshes a resource and returns its current state.
+func (w *WrappedProviderInterface) ReadResource(req providers.ReadResourceRequest) providers.ReadResourceResponse {
+	return providers.ReadResourceResponse{}
+}
+
+// PlanResourceChange takes the current state and proposed state of a
+// resource, and returns the planned final state.
+func (w *WrappedProviderInterface) PlanResourceChange(req providers.PlanResourceChangeRequest) providers.PlanResourceChangeResponse {
+	return w.wrapped.PlanResourceChange(req)
+}
+
+// ApplyResourceChange takes the planned state for a resource, which may
+// yet contain unknown computed values, and applies the changes returning
+// the final state.
+func (w *WrappedProviderInterface) ApplyResourceChange(req providers.ApplyResourceChangeRequest) providers.ApplyResourceChangeResponse {
+	return providers.ApplyResourceChangeResponse{}
+}
+
+// ImportResourceState requests that the given resource be imported.
+func (w *WrappedProviderInterface) ImportResourceState(req providers.ImportResourceStateRequest) providers.ImportResourceStateResponse {
+	return providers.ImportResourceStateResponse{}
+}
+
+// ReadDataSource returns the data source's current state.
+func (w *WrappedProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
+	mockedResult := w.dataSourceProvider.ReadDataSource(req.Config)
+	return providers.ReadDataSourceResponse{State: mockedResult}
+}
+
+// Close shuts down the plugin process if applicable.
+func (w *WrappedProviderInterface) Close() error {
+	return w.wrapped.Close()
 }

@@ -19,6 +19,20 @@ mock "aws_subnet_ids" "secure" {
   }
 }
 
+mock "terraform_remote_state" "vpc"{
+  backend = "s3"
+  config = {
+     bucket = "mybucket"
+     key    = "path/to/my/key"
+     region = "us-east-1"
+  }
+  mock{
+    outputs = {
+      security_groups = ["123"]
+    }
+  }
+}
+
 assert "module.ec2-instance.aws_instance" "this[0]" {
     associate_public_ip_address = true
     private_ip = "10.0.0.1"
