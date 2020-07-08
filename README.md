@@ -116,7 +116,9 @@ Checking a resource is created with correct parameters is currently supported. C
 
 ### Installation
 
-No pre-built binaries are available yet. `go get github.com/nhurel/terraspec` is the easiest way to get started
+For gophers, running `go get github.com/nhurel/terraspec` should do the trick.
+
+Otherwise, download a released binary from the releases page, put it in your PATH and make sure it's executable
 
 ## License
 
