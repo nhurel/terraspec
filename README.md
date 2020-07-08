@@ -40,6 +40,36 @@ assert "output" "output-name" {
 }
 ```
 
+### Mock data resource
+
+If your configuration contains `data` resource, you can mock their value by writing a `mock` resource in your spec file. A `mock` resource must have the exact same configuration block as the `data` resource. The data you want to return must be set in a `return` block.
+
+Example :
+
+Terraform code :
+```
+data "aws_vpcs" "selected" {
+  tags = {
+    service = "secure"
+  }
+}
+```
+
+The spec file mocking this data source should be :
+```
+mock "aws_vpcs" "selected" {
+  // Config block must be duplicated
+  tags = {
+    service = "secure"
+  }
+  return {
+    // All attributes of the returned data are set in the return block
+    ids = ["mocked_vpc_id"]
+  }
+}
+```
+
+
 
 ### Run 
 
@@ -78,12 +108,6 @@ This makes `terraspec` able to validate any configuration, whichever cloud provi
 ## Limitations
 
 Terraspec is still at its early stages and doesn't cover all cases yet. Here are the known limitations identified so far.
-
-### Data resources
-
-Currently, terraspec doesn't support mocking the `data` blocks. All datasources will return empty results. For certain configuration, this can make the computation of the plan fail and `terraspec` won't be able to test your code.
-
-The current workaround is for your plan to have `input` variables (default value being empty) that you override in your test scenario. In your plan, using `coalesce(var.mock_result, data.my_resource.property)` will make tests works while keeping the datasource the default source of truth.
 
 
 ### Negative assertions
