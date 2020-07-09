@@ -69,7 +69,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 	for _, assert := range s.Asserts {
 		if assert.Type == "output" {
 			output := findOuput(assert.Key(), plan.Changes.Outputs)
-			path := cty.Path{}.GetAttr("output").GetAttr(assert.Key())
+			path := cty.GetAttrPath("output").GetAttr(assert.Key())
 			if output == nil {
 				diags = diags.Append(ErrorDiags(path, "Missing value"))
 				continue
@@ -92,7 +92,8 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
 			}
-			assertDiags := checkAssert(cty.Path{}.GetAttr(assert.Key()), assert.Value, change)
+
+			assertDiags := checkAssert(cty.GetAttrPath(assert.Key()), assert.Value, change)
 			diags = diags.Append(assertDiags)
 		}
 	}

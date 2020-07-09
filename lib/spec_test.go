@@ -272,7 +272,7 @@ func TestCheckAssert(t *testing.T) {
 		"list": gotList,
 	})
 
-	rootPath := cty.Path{}.GetAttr("test")
+	rootPath := cty.GetAttrPath("test")
 	var expectedResult tfdiags.Diagnostics
 	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("block").GetAttr("count"), 2, 3))
 	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("block").GetAttr("sub-block").GetAttr("delete"), false, true))
