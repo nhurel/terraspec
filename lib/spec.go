@@ -88,11 +88,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 				continue
 			}
 
-			iType, err := resource.After.ImpliedType()
-			if err != nil {
-				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
-			}
-			change, err := resource.After.Decode(iType)
+			change, err := resource.After.Decode(assert.Value.Type())
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
 			}

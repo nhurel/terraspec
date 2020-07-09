@@ -52,6 +52,9 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
       credit_specification {
         cpu_credits = "standard"
       }
+
+      vpc_security_group_ids = ["123"]
+
 }
 
 refute "module.ec2-instance.aws_instance" "this[0]" {
