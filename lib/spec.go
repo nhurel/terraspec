@@ -31,6 +31,8 @@ type Assert struct {
 	Name  string
 	Value cty.Value
 }
+
+// Mock struct contains the definition of mocked data resources
 type Mock struct {
 	Type  string
 	Name  string

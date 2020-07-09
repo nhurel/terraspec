@@ -35,6 +35,9 @@ vet: fmt
 fmt:
 	go fmt ./...
 
+lint:
+	golint ./...
+
 current_version:
 	@echo $(git_tag)
 
