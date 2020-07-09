@@ -203,6 +203,9 @@ func TestCheckAssert(t *testing.T) {
 	expectedSet.Add(cty.ObjectVal(map[string]cty.Value{
 		"name": cty.StringVal("y"),
 	}))
+
+	expectedList := cty.ListVal([]cty.Value{cty.StringVal("alpha"), cty.StringVal("beta"), cty.StringVal("gamma")})
+
 	expected := cty.ObjectVal(map[string]cty.Value{
 		"name":   cty.StringVal("test-name"),
 		"region": cty.StringVal("wrong"),
@@ -229,7 +232,8 @@ func TestCheckAssert(t *testing.T) {
 				"ipaddress": cty.StringVal("10.0.0.3"),
 			}),
 		}),
-		"set": cty.SetValFromValueSet(expectedSet),
+		"set":  cty.SetValFromValueSet(expectedSet),
+		"list": expectedList,
 	})
 
 	gotSet := cty.NewValueSet(exampleVal.Type())
@@ -239,6 +243,7 @@ func TestCheckAssert(t *testing.T) {
 	gotSet.Add(cty.ObjectVal(map[string]cty.Value{
 		"name": cty.StringVal("z"),
 	}))
+	gotList := cty.ListVal([]cty.Value{cty.StringVal("alpha"), cty.StringVal("gamma"), cty.StringVal("delta")})
 	got := cty.ObjectVal(map[string]cty.Value{
 		"name":   cty.StringVal("test-name"),
 		"region": cty.StringVal("right"),
@@ -263,7 +268,8 @@ func TestCheckAssert(t *testing.T) {
 				"ipaddress": cty.StringVal("10.10.0.1"),
 			}),
 		}),
-		"set": cty.SetValFromValueSet(gotSet),
+		"set":  cty.SetValFromValueSet(gotSet),
+		"list": gotList,
 	})
 
 	rootPath := cty.Path{}.GetAttr("test")
@@ -271,6 +277,11 @@ func TestCheckAssert(t *testing.T) {
 	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("block").GetAttr("count"), 2, 3))
 	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("block").GetAttr("sub-block").GetAttr("delete"), false, true))
 	expectedResult = expectedResult.Append(SuccessDiags(rootPath.GetAttr("block").GetAttr("sub-block").GetAttr("enable"), true))
+
+	expectedResult = expectedResult.Append(SuccessDiags(rootPath.GetAttr("list").Index(cty.NumberIntVal(0)), "alpha"))
+	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("list").Index(cty.NumberIntVal(1)), "beta", "gamma"))
+	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("list").Index(cty.NumberIntVal(2)), "gamma", "delta"))
+
 	expectedResult = expectedResult.Append(SuccessDiags(rootPath.GetAttr("multi-value").Index(cty.NumberIntVal(0)).GetAttr("ipaddress"), "10.0.0.1"))
 	expectedResult = expectedResult.Append(AssertErrorDiags(rootPath.GetAttr("multi-value").Index(cty.NumberIntVal(1)).GetAttr("ipaddress"), "10.0.0.2", "10.10.0.1"))
 	expectedResult = expectedResult.Append(ErrorDiags(rootPath.GetAttr("multi-value").Index(cty.NumberIntVal(2)), "Could not find child at index 2"))
