@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/terraform/backend/local"
 	"github.com/hashicorp/terraform/helper/logging"
@@ -59,6 +60,8 @@ func main() {
 
 	reports := make(chan *testReport)
 
+	// Start measuring execution time of test suites
+	var startTime = time.Now()
 	var wg sync.WaitGroup
 	for _, tc := range testCases {
 		wg.Add(1)
@@ -67,22 +70,32 @@ func main() {
 			wg.Done()
 		}(tc)
 	}
-	exitCode := 0
+
+	var duration time.Duration
 	go func() {
 		wg.Wait()
 		close(reports)
+		// End measuring execution time of test suites onces they all finished
+		duration = time.Since(startTime)
 	}()
 
+	var success, errors = 0, 0
+
+	exitCode := 0
 	for r := range reports {
 		fmt.Printf("🏷  %s\n", r.name)
 		if r.report.HasErrors() {
+			errors++
 			exitCode = 1
+		} else {
+			success++
 		}
 		if *displayPlan {
 			fmt.Println(r.plan)
 		}
 		printDiags(r.report)
 	}
+	fmt.Printf("\n🏁 %d suites run in %s \terror : %d \tsuccess : %d\n", len(testCases), duration.String(), errors, success)
 	os.Exit(exitCode)
 }
 
