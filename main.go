@@ -105,7 +105,9 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 	var planOutput string
 
 	tfCtx, spec, ctxDiags := PrepareTestSuite(".", tc)
-
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
 	//Refresh is required to have datasources read
 	_, ctxDiags = tfCtx.Refresh()
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
@@ -165,7 +167,7 @@ func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.
 
 	// Parse specs may return mocked data source result
 	spec, diags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
-	ctxDiags.Append(diags)
+	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
