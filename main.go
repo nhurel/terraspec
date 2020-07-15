@@ -50,9 +50,11 @@ type testReport struct {
 func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
+	log.SetFlags(0)
+
 	testCases := findCases(*specDir)
 	if len(testCases) == 0 {
-		log.Fatal("No test case found")
+		log.Fatalf("No test case found in %s directory\n", *specDir)
 	}
 
 	reports := make(chan *testReport)
@@ -167,7 +169,7 @@ func findCases(rootDir string) []*testCase {
 
 	rootFis, err := ioutil.ReadDir(rootDir)
 	if err != nil {
-		log.Fatal(err)
+		return nil
 	}
 
 	for _, rootFi := range rootFis {
