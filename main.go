@@ -160,7 +160,7 @@ func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.
 	}
 
 	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver) // Setting a different folder works to parse configuration but not the modules :/
-	ctxDiags.Append(diags)
+	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
