@@ -101,13 +101,20 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 		}
 	}
 
+	return diags, nil
+}
+
+// ValidateMocks checks all mocks were called as expected
+func (s *Spec) ValidateMocks() tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
 	for _, mock := range s.Mocks {
 		if !mock.Called() {
 			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data resource matched :\n%s", string(mock.Body))))
+		} else {
+			diags = diags.Append(SuccessDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("mock has been called %d time(s)", mock.calls)))
 		}
 	}
-
-	return diags, nil
+	return diags
 }
 
 func findOuput(name string, outputs []*plans.OutputChangeSrc) *plans.OutputChangeSrc {

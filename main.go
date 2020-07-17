@@ -110,12 +110,14 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 	}
 	//Refresh is required to have datasources read
 	_, ctxDiags = tfCtx.Refresh()
+	ctxDiags = ctxDiags.Append(spec.ValidateMocks())
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
 
 	// Finally, compute the terraform plan
-	plan, ctxDiags := tfCtx.Plan()
+	plan, planDiags := tfCtx.Plan()
+	ctxDiags = ctxDiags.Append(planDiags)
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
@@ -134,7 +136,8 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 	}
 	logging.SetOutput()
 
-	ctxDiags, err := spec.Validate(plan)
+	validateDiags, err := spec.Validate(plan)
+	ctxDiags = ctxDiags.Append(validateDiags)
 	if err != nil {
 		// TODO manage this error by returning a report with an error diagnostic
 		log.Fatal(err)

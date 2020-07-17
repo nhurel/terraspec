@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform/configs/configschema"
-	"github.com/hashicorp/terraform/plans"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/zclconf/go-cty/cty"
@@ -421,15 +420,13 @@ region = "us-east-1"
 					},
 				},
 			},
+			expected: SuccessDiags(cty.GetAttrPath("data_called").GetAttr("called"), "mock has been called 1 time(s)"),
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := tt.given.Validate(&plans.Plan{Changes: &plans.Changes{}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := tt.given.ValidateMocks()
 			if tt.expected == nil && len(got) > 0 {
 				t.Fatalf("Unexpected diagnostic return %v", got[0])
 			}
