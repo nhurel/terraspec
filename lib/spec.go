@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hcldec"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs/configschema"
@@ -250,10 +251,8 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 
 	var r root
 	parsed := &Spec{}
-	file, diags := hclsyntax.ParseConfig(
-		spec,
-		filename, hcl.Pos{Line: 1, Column: 1},
-	)
+	file, diags := hclparse.NewParser().ParseHCL(spec, filename)
+
 	if diags.HasErrors() {
 		return nil, diags
 	}
