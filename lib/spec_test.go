@@ -1,6 +1,7 @@
 package terraspec
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform/configs/configschema"
@@ -383,6 +384,11 @@ func testDiagnostic(t *testing.T, got, expected tfdiags.Diagnostic) {
 }
 
 func TestValidateMocks(t *testing.T) {
+	var notCalledBody = `{
+id = 123456
+region = "us-east-1"
+}
+`
 	var tests = map[string]struct {
 		given    *Spec
 		expected tfdiags.Diagnostic
@@ -396,10 +402,11 @@ func TestValidateMocks(t *testing.T) {
 							"id":     cty.NumberIntVal(123456),
 							"region": cty.StringVal("us-east-1"),
 						}),
+						Body: []byte(notCalledBody),
 					},
 				},
 			},
-			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), `Expected data to be called with cty.ObjectVal(map[string]cty.Value{"id":cty.NumberIntVal(123456), "region":cty.StringVal("us-east-1")})`),
+			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No data resource matched :\n%s", notCalledBody)),
 		},
 		"called": {
 			given: &Spec{

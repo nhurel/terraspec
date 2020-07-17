@@ -38,6 +38,7 @@ type Mock struct {
 	Name  string
 	Query cty.Value
 	Data  cty.Value
+	Body  []byte
 	calls int
 }
 
@@ -102,7 +103,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 
 	for _, mock := range s.Mocks {
 		if !mock.Called() {
-			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("Expected data to be called with %v", mock.Query.GoString())))
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data resource matched :\n%s", string(mock.Body))))
 		}
 	}
 
@@ -274,7 +275,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		if diags.HasErrors() {
 			return nil, diags
 		}
-		parsed.Mocks = append(parsed.Mocks, &Mock{Name: mock.Name, Type: mock.Type, Query: query, Data: mocked})
+		var body []byte
+		if r, ok := mock.Config.(*hclsyntax.Body); ok {
+			body = r.Range().SliceBytes(file.Bytes)
+		}
+		parsed.Mocks = append(parsed.Mocks, &Mock{Name: mock.Name, Type: mock.Type, Query: query, Data: mocked, Body: body})
 	}
 
 	return parsed, diags
