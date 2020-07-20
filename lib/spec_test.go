@@ -404,8 +404,9 @@ region = "us-east-1"
 						Body: []byte(notCalledBody),
 					},
 				},
+				DataSourceReader: &MockDataSourceReader{},
 			},
-			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No data resource matched :\n%s", notCalledBody)),
+			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No data resource matched :\n%s\nUncatched data source calls are :\n", notCalledBody)),
 		},
 		"called": {
 			given: &Spec{

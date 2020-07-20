@@ -21,9 +21,10 @@ import (
 
 // Spec struct contains the assertions described in .tfspec file
 type Spec struct {
-	Asserts []*Assert
-	Refutes []*Assert
-	Mocks   []*Mock
+	Asserts          []*Assert
+	Refutes          []*Assert
+	Mocks            []*Mock
+	DataSourceReader *MockDataSourceReader
 }
 
 // Assert struct contains the definition of an assertion
@@ -108,9 +109,18 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 // ValidateMocks checks all mocks were called as expected
 func (s *Spec) ValidateMocks() tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
+	var allMissedCalls string
 	for _, mock := range s.Mocks {
 		if !mock.Called() {
-			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data resource matched :\n%s", string(mock.Body))))
+			if allMissedCalls == "" {
+				var sb strings.Builder
+				for _, call := range s.DataSourceReader.UnmatchedCalls() {
+					sb.Write(MarshalValue(call))
+					sb.WriteString("\n")
+				}
+				allMissedCalls = sb.String()
+			}
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data resource matched :\n%s\nUncatched data source calls are :\n%s", string(mock.Body), allMissedCalls)))
 		} else {
 			diags = diags.Append(SuccessDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("mock has been called %d time(s)", mock.calls)))
 		}

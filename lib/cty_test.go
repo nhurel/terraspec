@@ -1,6 +1,7 @@
 package terraspec_test
 
 import (
+	"strings"
 	"testing"
 
 	terraspec "github.com/nhurel/terraspec/lib"
@@ -95,6 +96,66 @@ func TestIsNull(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			if got := terraspec.IsNull(tt.given); got != tt.expected {
 				t.Errorf("Error : Got %t - Want %t", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMarshalValue(t *testing.T) {
+
+	var tests = map[string]struct {
+		given    cty.Value
+		expected string
+	}{
+		"terraform_remote_state": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"backend": cty.StringVal("s3"),
+				"config": cty.MapVal(map[string]cty.Value{
+					"bucket": cty.StringVal("mybucket"),
+					"key":    cty.StringVal("path/to/my/key"),
+					"region": cty.StringVal("us-east-1"),
+				}),
+			}),
+			expected: ` {
+        backend = "s3"
+        config {
+            bucket = "mybucket"
+            key    = "path/to/my/key"
+            region = "us-east-1"
+        }
+    }
+`,
+		},
+		"aws_ami": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"most_recent": cty.True,
+				"owners":      cty.ListVal([]cty.Value{cty.StringVal("amazon")}),
+				"filter": cty.SetVal([]cty.Value{
+					cty.ObjectVal(map[string]cty.Value{
+						"name":   cty.StringVal("name"),
+						"values": cty.ListVal([]cty.Value{cty.StringVal("amzn-ami-hvm-*-x86_64-gp2")}),
+					}),
+					cty.ObjectVal(map[string]cty.Value{
+						"name":   cty.StringVal("owner-alias"),
+						"values": cty.ListVal([]cty.Value{cty.StringVal("amazon")}),
+					}),
+				}),
+			},
+			),
+			expected: ` {
+              filter      = [{ name = "name", values = ["amzn-ami-hvm-*-x86_64-gp2"] }, { name = "owner-alias", values = ["amazon"] }]
+              most_recent = true
+              owners      = ["amazon"]
+            }
+            `,
+		},
+	}
+	for k, tt := range tests {
+		t.Run(k, func(t *testing.T) {
+			e := strings.ReplaceAll(tt.expected, " ", "")
+			got := string(terraspec.MarshalValue(tt.given))
+			if g := strings.ReplaceAll(string(got), " ", ""); g != e {
+				t.Errorf("Value not marshalled as expected.\nGot : [%s]\nWant : [%s]", got, tt.expected)
 			}
 		})
 	}

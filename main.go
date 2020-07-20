@@ -179,6 +179,7 @@ func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.
 	if len(spec.Mocks) > 0 {
 		providerResolver.DataSourceReader.SetMock(spec.Mocks)
 	}
+	spec.DataSourceReader = providerResolver.DataSourceReader
 	return tfCtx, spec, ctxDiags
 }
 

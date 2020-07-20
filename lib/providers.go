@@ -27,6 +27,8 @@ type ProviderResolver struct {
 // MockDataSourceReader can mock a call to ReadDataSource and return appropriate mocked data
 type MockDataSourceReader struct {
 	mockDataSources []*Mock
+	unmatchedCalls  []cty.Value
+	mux             sync.RWMutex
 }
 
 // SetMock populates mock data
@@ -40,10 +42,24 @@ func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
 	for _, mock := range m.mockDataSources {
 		if mock.Query.RawEquals(config) {
 			mockedResult = mock.Call()
-			break
+			return mockedResult
 		}
 	}
+
+	m.mux.Lock()
+	m.unmatchedCalls = append(m.unmatchedCalls, config)
+	m.mux.Unlock()
+
 	return mockedResult
+}
+
+// UnmatchedCalls returns the list of all data source calls that were not mocked
+func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
+	m.mux.RLock()
+	uc := make([]cty.Value, len(m.unmatchedCalls))
+	copy(uc, m.unmatchedCalls)
+	m.mux.RUnlock()
+	return uc
 }
 
 // BuildProviderResolver returns a ProviderResolver able to find all providers

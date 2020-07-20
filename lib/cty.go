@@ -1,8 +1,10 @@
 package terraspec
 
 import (
+	"fmt"
 	"log"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -44,4 +46,46 @@ func IsNull(val cty.Value) bool {
 		return true
 	}
 	return false
+}
+
+//MarshalValue serializes a cty.Value in hcl format
+func MarshalValue(value cty.Value) []byte {
+	f := hclwrite.NewEmptyFile()
+	marshalValue(value, f.Body())
+	return f.Bytes()
+}
+
+func marshalValue(value cty.Value, writer *hclwrite.Body) {
+	var w = writer
+	cty.Walk(value, func(path cty.Path, val cty.Value) (bool, error) {
+		if IsNull(val) {
+			return true, nil
+		}
+
+		var key string
+		if len(path) > 0 {
+			lastPath := path[len(path)-1]
+
+			switch p := lastPath.(type) {
+			case cty.GetAttrStep:
+				key = p.Name
+			case cty.IndexStep:
+				key = fmt.Sprintf("%v", PrimitiveValue(p.Key))
+			}
+		}
+		if val.Type().IsListType() || val.Type().IsSetType() {
+			w.SetAttributeValue(key, val)
+			return false, nil
+		}
+
+		if val.Type().IsPrimitiveType() {
+			w.SetAttributeValue(key, val)
+		} else {
+			b := w.AppendNewBlock(key, nil)
+			w = b.Body()
+		}
+
+		return true, nil
+	})
+
 }
