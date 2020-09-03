@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs/configschema"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
@@ -12,8 +13,8 @@ import (
 
 func TestParsing(t *testing.T) {
 	schemas := &terraform.Schemas{
-		Providers: map[string]*terraform.ProviderSchema{
-			"ressource": {
+		Providers: map[addrs.Provider]*terraform.ProviderSchema{
+			addrs.NewDefaultProvider("ressource"): {
 				ResourceTypes: map[string]*configschema.Block{
 					"ressource_type": {
 						Attributes: map[string]*configschema.Attribute{
@@ -36,7 +37,7 @@ func TestParsing(t *testing.T) {
 					"ressource_type": 0,
 				},
 			},
-			"data": {
+			addrs.NewDefaultProvider("data"): {
 				DataSources: map[string]*configschema.Block{
 					"data_type": {
 						Attributes: map[string]*configschema.Attribute{

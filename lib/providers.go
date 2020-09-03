@@ -18,7 +18,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// ProviderResolver implements terraform's providers.Resolver interface
+// ProviderResolver is reponsible for finding all provider implementations that can be instanciated
 type ProviderResolver struct {
 	KnownPlugins     map[addrs.Provider]discovery.PluginMeta
 	DataSourceReader *MockDataSourceReader
@@ -71,7 +71,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
 	for k := range pluginMetaSet {
-		pluginsSchema[addrs.NewLegacyProvider(k.Name)] = k
+		pluginsSchema[addrs.NewDefaultProvider(k.Name)] = k
 	}
 	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
 }
@@ -97,17 +97,16 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 	return c
 }
 
-// ResolveProviders defined by providers.Resolver interface.
-// It returns a factory capable of instanciating the required plugin to serve the provider
-func (r *ProviderResolver) ResolveProviders(reqd discovery.PluginRequirements) (map[addrs.Provider]providers.Factory, []error) {
+// ResolveProviders returns a map of factory capable of instanciating the required plugin to serve the provider
+func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Factory {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
 		result[k] = buildFactory(p, r.DataSourceReader)
 	}
 
 	tfProvider := terraformProvider.NewProvider()
-	result[addrs.NewLegacyProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
-	return result, nil
+	result[addrs.NewBuiltInProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
+	return result
 }
 
 func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader) providers.Factory {
@@ -130,6 +129,8 @@ type ProviderInterface struct {
 	_plugin            *plugin.GRPCProvider
 	lock               sync.Mutex
 }
+
+var _ providers.Interface = (*ProviderInterface)(nil)
 
 func (m *ProviderInterface) plugin() (*plugin.GRPCProvider, error) {
 	if m._plugin != nil {

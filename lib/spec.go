@@ -313,7 +313,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 			},
 		}
 	} else {
-		schema := laxSchema(schemas.ProviderSchema(provName))
+		schema := laxSchema(LookupProviderSchema(schemas, provName))
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
@@ -324,7 +324,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, mock cty.Value, diags hcl.Diagnostics) {
 	var codedMock hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
-	schema := schemas.ProviderSchema(provName)
+	schema := LookupProviderSchema(schemas, provName)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
 
 	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)

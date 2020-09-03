@@ -131,7 +131,7 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 			Writer:      stdout,
 			ErrorWriter: stdout,
 		}
-		local.RenderPlan(plan, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
+		local.RenderPlan(plan, nil, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
 		planOutput = stdout.String()
 	}
 	logging.SetOutput()

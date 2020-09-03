@@ -143,7 +143,13 @@ func TestMarshalValue(t *testing.T) {
 			},
 			),
 			expected: ` {
-              filter      = [{ name = "name", values = ["amzn-ami-hvm-*-x86_64-gp2"] }, { name = "owner-alias", values = ["amazon"] }]
+              filter = [{ 
+                  name = "name"
+                  values = ["amzn-ami-hvm-*-x86_64-gp2"] 
+                 }, {
+                  name = "owner-alias"
+                  values = ["amazon"] 
+               }]
               most_recent = true
               owners      = ["amazon"]
             }

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/terraform/configs/configload"
-	"github.com/hashicorp/terraform/providers"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/zclconf/go-cty/cty"
@@ -13,7 +12,7 @@ import (
 
 // NewContext creates a new terraform.Context able to compute configs in the context of terraspec
 // It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Context, tfdiags.Diagnostics) {
+func NewContext(dir, varFile string, resolver *ProviderResolver) (*terraform.Context, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -52,12 +51,14 @@ func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Co
 		variables = InputValuesFromType(values, terraform.ValueFromNamedFile)
 	}
 
+	providers := resolver.ResolveProviders()
+
 	opts := &terraform.ContextOpts{
-		Config:           cfg,
-		Parallelism:      10,
-		ProviderResolver: resolver,
-		Provisioners:     ProvisionersFactory(),
-		Variables:        variables,
+		Config:       cfg,
+		Parallelism:  10,
+		Providers:    providers,
+		Provisioners: ProvisionersFactory(),
+		Variables:    variables,
 	}
 
 	return terraform.NewContext(opts)
@@ -73,4 +74,14 @@ func InputValuesFromType(values map[string]cty.Value, sourceType terraform.Value
 		}
 	}
 	return vals
+}
+
+// LookupProviderSchema searches for the schema matching the given type in the collection of known schemas
+func LookupProviderSchema(schemas *terraform.Schemas, providerType string) *terraform.ProviderSchema {
+	for k, v := range schemas.Providers {
+		if k.Type == providerType {
+			return v
+		}
+	}
+	return nil
 }
