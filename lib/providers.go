@@ -102,7 +102,6 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 func (r *ProviderResolver) ResolveProviders() (map[addrs.Provider]providers.Factory, []error) {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
-		fmt.Println(k)
 		result[k] = buildFactory(p, r.DataSourceReader)
 	}
 
