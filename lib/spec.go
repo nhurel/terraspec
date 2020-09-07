@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform/addrs"
+	"github.com/hashicorp/terraform/backend"
 	"github.com/hashicorp/terraform/configs/configschema"
 	"github.com/hashicorp/terraform/plans"
 	"github.com/hashicorp/terraform/terraform"
@@ -42,6 +43,40 @@ type Mock struct {
 	Data  cty.Value
 	Body  []byte
 	calls int
+}
+
+// Mocks metadata such as workspace
+type MockMetadata struct {
+	Workspace string
+}
+
+type assert struct {
+	Type      string         `hcl:"type,label"`
+	Name      string         `hcl:"name,label"`
+	Config    hcl.Body       `hcl:",remain"`
+	DependsOn hcl.Expression `hcl:"depends_on,attr"`
+}
+
+type mock struct {
+	Type   string   `hcl:"type,label"`
+	Name   string   `hcl:"name,label"`
+	Config hcl.Body `hcl:",remain"`
+}
+
+type mock_metadata struct {
+	Config hcl.Body `hcl:",remain"`
+}
+
+type MetadataConfig struct {
+	Workspace string `hcl:"workspace"`
+}
+
+type root struct {
+	Asserts      []*assert        `hcl:"assert,block"`
+	Refutes      []*assert        `hcl:"refute,block"`
+	Mocks        []*mock          `hcl:"mock,block"`
+	MockMetadata []*mock_metadata `hcl:"mock_metadata,block"`
+	// Modules   []*Module   `hcl:"module,block"`
 }
 
 // Key return fully qualified name of an Assert
@@ -226,6 +261,18 @@ func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 
 }
 
+// ReadSpecMetadataMock reads the .tfspec file and returns the metadata mocks
+func ReadSpecMetadataMock(filename string) (*MockMetadata, tfdiags.Diagnostics) {
+	spec, err := ioutil.ReadFile(filename)
+	var tfdiags tfdiags.Diagnostics
+	if err != nil {
+		return nil, tfdiags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Detail: err.Error(), Summary: "Failed to read file"})
+	}
+
+	s, diags := ParseMockedMetadata(spec, filename)
+	return s, tfdiags.Append(diags)
+}
+
 // ReadSpec reads the .tfspec file and returns the resulting Spec or a Diagnostics if error occured in the process
 func ReadSpec(filename string, schemas *terraform.Schemas) (*Spec, tfdiags.Diagnostics) {
 	spec, err := ioutil.ReadFile(filename)
@@ -240,25 +287,44 @@ func ReadSpec(filename string, schemas *terraform.Schemas) (*Spec, tfdiags.Diagn
 }
 
 // ParseSpec parses the spec contained in the []byte parameter and returns the resulting Spec or a Diagnostics if error occured in the process
-func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec, hcl.Diagnostics) {
-	type assert struct {
-		Type      string         `hcl:"type,label"`
-		Name      string         `hcl:"name,label"`
-		Config    hcl.Body       `hcl:",remain"`
-		DependsOn hcl.Expression `hcl:"depends_on,attr"`
+func ParseMockedMetadata(spec []byte, filename string) (*MockMetadata, hcl.Diagnostics) {
+	var r root
+	metadata := &MockMetadata{}
+	file, diags := hclparse.NewParser().ParseHCL(spec, filename)
+
+	if diags.HasErrors() {
+		return nil, diags
 	}
-	type mock struct {
-		Type   string   `hcl:"type,label"`
-		Name   string   `hcl:"name,label"`
-		Config hcl.Body `hcl:",remain"`
-	}
-	type root struct {
-		Asserts []*assert `hcl:"assert,block"`
-		Refutes []*assert `hcl:"refute,block"`
-		Mocks   []*mock   `hcl:"mock,block"`
-		// Modules   []*Module   `hcl:"module,block"`
+	diags = gohcl.DecodeBody(file.Body, nil, &r)
+	if diags.HasErrors() {
+		return nil, diags
 	}
 
+	metadata.Workspace = backend.DefaultStateName
+	for _, mockMetadata := range r.MockMetadata {
+		spec := hcldec.ObjectSpec{
+			"workspace": &hcldec.AttrSpec{
+				Name:     "workspace",
+				Type:     cty.String,
+				Required: false,
+			},
+		}
+		val, diags := hcldec.Decode(mockMetadata.Config, spec, nil)
+
+		if diags.HasErrors() {
+			return nil, diags
+		}
+
+		if !val.IsNull() {
+			workspace := val.GetAttr("workspace")
+			metadata.Workspace = workspace.AsString()
+		}
+	}
+	return metadata, nil
+}
+
+// ParseSpec parses the spec contained in the []byte parameter and returns the resulting Spec or a Diagnostics if error occured in the process
+func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec, hcl.Diagnostics) {
 	var r root
 	parsed := &Spec{}
 	file, diags := hclparse.NewParser().ParseHCL(spec, filename)
@@ -313,7 +379,8 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 			},
 		}
 	} else {
-		schema := laxSchema(schemas.ProviderSchema(provName))
+		prov := addrs.ImpliedProviderForUnqualifiedType(provName)
+		schema := laxSchema(schemas.ProviderSchema(prov))
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
@@ -324,7 +391,8 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, mock cty.Value, diags hcl.Diagnostics) {
 	var codedMock hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
-	schema := schemas.ProviderSchema(provName)
+	prov := addrs.ImpliedProviderForUnqualifiedType(provName)
+	schema := schemas.ProviderSchema(prov)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
 
 	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)

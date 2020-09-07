@@ -131,7 +131,7 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 			Writer:      stdout,
 			ErrorWriter: stdout,
 		}
-		local.RenderPlan(plan, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
+		local.RenderPlan(plan, nil, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
 		planOutput = stdout.String()
 	}
 	logging.SetOutput()
@@ -162,7 +162,14 @@ func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.
 		return nil, nil, ctxDiags
 	}
 
-	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver) // Setting a different folder works to parse configuration but not the modules :/
+	// Parse specs may return mocked data source result
+	mockMetadata, diags := terraspec.ReadSpecMetadataMock(tc.specFile)
+	ctxDiags = ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
+	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, *providerResolver, mockMetadata) // Setting a different folder works to parse configuration but not the modules :/
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags

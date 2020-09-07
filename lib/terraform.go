@@ -1,19 +1,20 @@
 package terraspec
 
 import (
-	"path"
-	"path/filepath"
-
+	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs/configload"
 	"github.com/hashicorp/terraform/providers"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/zclconf/go-cty/cty"
+	"log"
+	"path"
+	"path/filepath"
 )
 
 // NewContext creates a new terraform.Context able to compute configs in the context of terraspec
 // It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Context, tfdiags.Diagnostics) {
+func NewContext(dir, varFile string, resolver ProviderResolver, mockMetadata *MockMetadata) (*terraform.Context, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -52,16 +53,52 @@ func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Co
 		variables = InputValuesFromType(values, terraform.ValueFromNamedFile)
 	}
 
+	// Bind available provider plugins to the constraints in config
+	var providerFactories map[addrs.Provider]providers.Factory
+	log.Printf("[TRACE] terraform.NewContext: resolving provider version selections")
+	var providerDiags tfdiags.Diagnostics
+	providerFactories, providerDiags = resourceProviderFactories(resolver)
+	diags = diags.Append(providerDiags)
+
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
 	opts := &terraform.ContextOpts{
+		Meta: &terraform.ContextMeta{
+			Env: mockMetadata.Workspace,
+		},
 		Config:           cfg,
 		Parallelism:      10,
-		ProviderResolver: resolver,
+		Providers: providerFactories,
 		Provisioners:     ProvisionersFactory(),
 		Variables:        variables,
 	}
 
 	return terraform.NewContext(opts)
 }
+
+func resourceProviderFactories(resolver ProviderResolver) (map[addrs.Provider]providers.Factory, tfdiags.Diagnostics) {
+	var diags tfdiags.Diagnostics
+	ret, errs := resolver.ResolveProviders()
+	if errs != nil {
+		diags = diags.Append(
+			tfdiags.Sourceless(tfdiags.Error,
+				"Could not satisfy plugin requirements",
+				"Plugin reinitialization required. Please run \"terraform init -backend=false\".",
+			),
+		)
+
+		for _, err := range errs {
+			diags = diags.Append(err)
+		}
+
+		return nil, diags
+	}
+
+	return ret, nil
+}
+
 
 // InputValuesFromType converts a map of values file into InputValues with the given SourceType
 func InputValuesFromType(values map[string]cty.Value, sourceType terraform.ValueSourceType) terraform.InputValues {

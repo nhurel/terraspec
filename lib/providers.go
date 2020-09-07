@@ -71,7 +71,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
 	for k := range pluginMetaSet {
-		pluginsSchema[addrs.NewLegacyProvider(k.Name)] = k
+		pluginsSchema[addrs.NewDefaultProvider(k.Name)] = k
 	}
 	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
 }
@@ -99,14 +99,15 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 
 // ResolveProviders defined by providers.Resolver interface.
 // It returns a factory capable of instanciating the required plugin to serve the provider
-func (r *ProviderResolver) ResolveProviders(reqd discovery.PluginRequirements) (map[addrs.Provider]providers.Factory, []error) {
+func (r *ProviderResolver) ResolveProviders() (map[addrs.Provider]providers.Factory, []error) {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
+		fmt.Println(k)
 		result[k] = buildFactory(p, r.DataSourceReader)
 	}
 
 	tfProvider := terraformProvider.NewProvider()
-	result[addrs.NewLegacyProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
+	result[addrs.NewBuiltInProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
 	return result, nil
 }
 

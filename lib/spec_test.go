@@ -2,6 +2,7 @@ package terraspec
 
 import (
 	"fmt"
+	"github.com/hashicorp/terraform/addrs"
 	"testing"
 
 	"github.com/hashicorp/terraform/configs/configschema"
@@ -10,10 +11,21 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+func TestReadSpecMetadataMock(t *testing.T) {
+	spec, diags := ReadSpecMetadataMock("testdata/scenario.tfspec")
+	if diags.HasErrors() {
+		t.Fatal(diags.Err())
+	}
+
+	if spec == nil {
+		t.Fatal("spec is nil")
+	}
+}
+
 func TestParsing(t *testing.T) {
 	schemas := &terraform.Schemas{
-		Providers: map[string]*terraform.ProviderSchema{
-			"ressource": {
+		Providers: map[addrs.Provider]*terraform.ProviderSchema{
+			addrs.NewDefaultProvider("ressource"): {
 				ResourceTypes: map[string]*configschema.Block{
 					"ressource_type": {
 						Attributes: map[string]*configschema.Attribute{
@@ -36,7 +48,7 @@ func TestParsing(t *testing.T) {
 					"ressource_type": 0,
 				},
 			},
-			"data": {
+			addrs.NewDefaultProvider("data"): {
 				DataSources: map[string]*configschema.Block{
 					"data_type": {
 						Attributes: map[string]*configschema.Attribute{
