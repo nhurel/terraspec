@@ -114,6 +114,20 @@ Terraspec is still at its early stages and doesn't cover all cases yet. Here are
 
 Checking a resource is created with correct parameters is currently supported. Checking a resource is **not** created, or checking a created resource **doesn't** contain a specific `block` is under development.
 
+### Terraform version constraints
+
+When you run `terraspec`, the version constraint set in your plan will be checked with the version of `terraform` embedded in `terraspec`. This means that if your `terraform` config defines a strict constraint about which `terraform` version it supports, the version of `terraform` embedded in `terraspec` may not comply with it.
+
+To help with you :
+- Upgrading `terraform` whenever you want, regardless there's a `terraspec` version matching
+- Upgrading `terraspec` whenever you want, regardless the version constraint set in your config
+
+`terraspec` provides a `--claim-version` flag. This flag will tell `terraspec` to substitute the `terraform` version defined in the code so it can comply with the version constraint.
+
+Use with care : this flag won't change the version of `terraform` effectively used to parse your code when testing it with `terraspec`. Using a highly different version of `terraform` than the one embedded in `terraspec` may lead to wrong validation.
+
+To know which vesion of `terraform` is embedded in `terraspec`, run `terraspec --version`.
+
 ### Installation
 
 For gophers, running `go get github.com/nhurel/terraspec` should do the trick.

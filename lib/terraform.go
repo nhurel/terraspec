@@ -4,16 +4,19 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/hashicorp/terraform/configs"
 	"github.com/hashicorp/terraform/configs/configload"
-	"github.com/hashicorp/terraform/providers"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
+	"github.com/hashicorp/terraform/version"
 	"github.com/zclconf/go-cty/cty"
+
+	goversion "github.com/hashicorp/go-version"
 )
 
 // NewContext creates a new terraform.Context able to compute configs in the context of terraspec
 // It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Context, tfdiags.Diagnostics) {
+func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context) (*terraform.Context, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -35,6 +38,7 @@ func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Co
 		diags = diags.Append(hclDiag)
 		return nil, diags
 	}
+	tsCtx.WorkaroundOnce.Do(func() { workaroundVersionCheck(cfg, tsCtx.UserVersion) })
 
 	var variables terraform.InputValues
 	if varFile != "" {
@@ -52,15 +56,28 @@ func NewContext(dir, varFile string, resolver providers.Resolver) (*terraform.Co
 		variables = InputValuesFromType(values, terraform.ValueFromNamedFile)
 	}
 
+	providers := resolver.ResolveProviders()
+
 	opts := &terraform.ContextOpts{
-		Config:           cfg,
-		Parallelism:      10,
-		ProviderResolver: resolver,
-		Provisioners:     ProvisionersFactory(),
-		Variables:        variables,
+		Config:       cfg,
+		Parallelism:  10,
+		Providers:    providers,
+		Provisioners: ProvisionersFactory(),
+		Variables:    variables,
 	}
 
 	return terraform.NewContext(opts)
+}
+
+func workaroundVersionCheck(cfg *configs.Config, userVersion *goversion.Version) {
+	if userVersion == nil {
+		return
+	}
+	diags := terraform.CheckCoreVersionRequirements(cfg)
+	if !diags.HasErrors() {
+		return
+	}
+	version.SemVer = userVersion
 }
 
 // InputValuesFromType converts a map of values file into InputValues with the given SourceType
@@ -73,4 +90,14 @@ func InputValuesFromType(values map[string]cty.Value, sourceType terraform.Value
 		}
 	}
 	return vals
+}
+
+// LookupProviderSchema searches for the schema matching the given type in the collection of known schemas
+func LookupProviderSchema(schemas *terraform.Schemas, providerType string) *terraform.ProviderSchema {
+	for k, v := range schemas.Providers {
+		if k.Type == providerType {
+			return v
+		}
+	}
+	return nil
 }

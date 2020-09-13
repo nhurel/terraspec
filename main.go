@@ -11,10 +11,12 @@ import (
 	"sync"
 	"time"
 
+	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/terraform/backend/local"
 	"github.com/hashicorp/terraform/helper/logging"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/hashicorp/terraform/tfdiags"
+	tfversion "github.com/hashicorp/terraform/version"
 	"github.com/mitchellh/cli"
 	"github.com/mitchellh/colorstring"
 	terraspec "github.com/nhurel/terraspec/lib"
@@ -29,7 +31,7 @@ var (
 	// dir = app.Flag("dir", "path to terraform config dir to test").Default(".").String()
 	specDir     = app.Flag("spec", "path to folder containing test cases").Default("spec").String()
 	displayPlan = app.Flag("display-plan", "Print the full plan before the results").Default("false").Bool()
-	version     = app.Version(Version)
+	tfVersion   = app.Flag("claim-version", "Simulate terraform version : This flag is a workaround to help upgrading terraspec and terraform independently. This flag won't change terraspec behavior but will make it pass version check").String()
 )
 
 type testCase struct {
@@ -48,8 +50,26 @@ type testReport struct {
 	report tfdiags.Diagnostics
 }
 
+func init() {
+	var versionString = `Terraspec Version : %s
+Terraform Version : %s`
+	app.Version(fmt.Sprintf(versionString, Version, tfversion.SemVer))
+}
+
 func main() {
+
 	kingpin.MustParse(app.Parse(os.Args[1:]))
+
+	var newSemVer *goversion.Version
+	var err error
+	if *tfVersion != "" {
+		newSemVer, err = goversion.NewSemver(*tfVersion)
+		if err != nil {
+			log.Fatalf("Invalid value for claim-version flag : %v", err)
+		}
+	}
+
+	tsCtx := &terraspec.Context{TerraformVersion: tfversion.SemVer, UserVersion: newSemVer}
 
 	log.SetFlags(0)
 
@@ -66,7 +86,7 @@ func main() {
 	for _, tc := range testCases {
 		wg.Add(1)
 		go func(tc *testCase) {
-			runTestCase(tc, reports)
+			runTestCase(tc, tsCtx, reports)
 			wg.Done()
 		}(tc)
 	}
@@ -96,15 +116,18 @@ func main() {
 		printDiags(r.report)
 	}
 	fmt.Printf("\n🏁 %d suites run in %s \terror : %d \tsuccess : %d\n", len(testCases), duration.String(), errors, success)
+	if tfversion.SemVer != tsCtx.TerraformVersion {
+		colorstring.Printf("[bold][yellow]Terraform version %s substitued with provided one %s\n", tsCtx.TerraformVersion.String(), tsCtx.UserVersion.String())
+	}
 	os.Exit(exitCode)
 }
 
-func runTestCase(tc *testCase, results chan<- *testReport) {
+func runTestCase(tc *testCase, tsCtx *terraspec.Context, results chan<- *testReport) {
 	// Disable terraform verbose logging except if TF_LOG is set
 	logging.SetOutput()
 	var planOutput string
 
-	tfCtx, spec, ctxDiags := PrepareTestSuite(".", tc)
+	tfCtx, spec, ctxDiags := PrepareTestSuite(".", tc, tsCtx)
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
@@ -131,7 +154,7 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 			Writer:      stdout,
 			ErrorWriter: stdout,
 		}
-		local.RenderPlan(plan, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
+		local.RenderPlan(plan, nil, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
 		planOutput = stdout.String()
 	}
 	logging.SetOutput()
@@ -147,7 +170,7 @@ func runTestCase(tc *testCase, results chan<- *testReport) {
 
 // PrepareTestSuite builds the terraform.Context that can compute the plan in given dir
 // and parses the spec file containing all assertions. Returned diagnostics may contain errors
-func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.Spec, tfdiags.Diagnostics) {
+func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terraform.Context, *terraspec.Spec, tfdiags.Diagnostics) {
 	var ctxDiags tfdiags.Diagnostics
 
 	absDir, err := filepath.Abs(dir)
@@ -162,7 +185,7 @@ func PrepareTestSuite(dir string, tc *testCase) (*terraform.Context, *terraspec.
 		return nil, nil, ctxDiags
 	}
 
-	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver) // Setting a different folder works to parse configuration but not the modules :/
+	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx) // Setting a different folder works to parse configuration but not the modules :/
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags

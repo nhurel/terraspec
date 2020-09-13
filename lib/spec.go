@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"sync"
 
+	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hcldec"
@@ -42,6 +44,13 @@ type Mock struct {
 	Data  cty.Value
 	Body  []byte
 	calls int
+}
+
+// Context struct holds terraspec options and internal state
+type Context struct {
+	TerraformVersion *goversion.Version
+	UserVersion      *goversion.Version
+	WorkaroundOnce   sync.Once
 }
 
 // Key return fully qualified name of an Assert
@@ -313,7 +322,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 			},
 		}
 	} else {
-		schema := laxSchema(schemas.ProviderSchema(provName))
+		schema := laxSchema(LookupProviderSchema(schemas, provName))
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
@@ -324,7 +333,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, mock cty.Value, diags hcl.Diagnostics) {
 	var codedMock hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
-	schema := schemas.ProviderSchema(provName)
+	schema := LookupProviderSchema(schemas, provName)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
 
 	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)
