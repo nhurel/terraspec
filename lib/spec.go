@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"sync"
 
+	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hcldec"
@@ -42,6 +44,13 @@ type Mock struct {
 	Data  cty.Value
 	Body  []byte
 	calls int
+}
+
+// Context struct holds terraspec options and internal state
+type Context struct {
+	TerraformVersion *goversion.Version
+	UserVersion      *goversion.Version
+	WorkaroundOnce   sync.Once
 }
 
 // Key return fully qualified name of an Assert
