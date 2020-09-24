@@ -57,8 +57,7 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
     }
 }
 
-refute "module.ec2-instance.aws_instance" "this[0]" {
-  ebs_block_device{}
+reject "module.ec2-instance.aws_instance" "this[1]" {
 }
 
 assert "output" "private_ip" {

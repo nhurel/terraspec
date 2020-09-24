@@ -72,6 +72,13 @@ func TestParsing(t *testing.T) {
 		expected := cty.ObjectVal(
 			map[string]cty.Value{
 				"property": cty.StringVal("value"),
+				"reject": cty.ObjectVal(
+					map[string]cty.Value{
+						"inner": cty.ObjectVal(
+							map[string]cty.Value{
+								"inner_prop": cty.StringVal("bad_value"),
+							}),
+					}),
 				"inner": cty.ObjectVal(
 					map[string]cty.Value{
 						"inner_prop": cty.StringVal("value2"),
@@ -83,21 +90,15 @@ func TestParsing(t *testing.T) {
 		}
 	}
 
-	if nb := len(spec.Refutes); nb != 1 {
+	if nb := len(spec.Rejects); nb != 1 {
 		t.Errorf("Spec should have 1 refutes. Got %d", nb)
 	} else {
-		refute := spec.Refutes[0]
-		if refute.Type != "output" {
-			t.Errorf("refute type is wrong. Got %s", refute.Type)
+		reject := spec.Rejects[0]
+		if reject.Type != "output" {
+			t.Errorf("refute type is wrong. Got %s", reject.Type)
 		}
-		if refute.Name != "name" {
-			t.Errorf("refute name is wrong. Got %s", refute.Name)
-		}
-		expected := cty.ObjectVal(map[string]cty.Value{
-			"value": cty.StringVal("value"),
-		})
-		if !refute.Value.RawEquals(expected) {
-			t.Errorf("refute.Value not as expected. \nGot %s\nWant %s", refute.Value.GoString(), expected.GoString())
+		if reject.Name != "name" {
+			t.Errorf("refute name is wrong. Got %s", reject.Name)
 		}
 	}
 
@@ -396,8 +397,8 @@ region = "us-east-1"
 		"not called": {
 			given: &Spec{
 				Mocks: []*Mock{
-					{Name: "uncalled",
-						Type: "data_not_called",
+					{TypeName: TypeName{Name: "uncalled",
+						Type: "data_not_called"},
 						Query: cty.ObjectVal(map[string]cty.Value{
 							"id":     cty.NumberIntVal(123456),
 							"region": cty.StringVal("us-east-1"),
@@ -412,8 +413,8 @@ region = "us-east-1"
 		"called": {
 			given: &Spec{
 				Mocks: []*Mock{
-					{Name: "called",
-						Type: "data_called",
+					{TypeName: TypeName{Name: "called",
+						Type: "data_called"},
 						Query: cty.ObjectVal(map[string]cty.Value{
 							"id":     cty.NumberIntVal(123456),
 							"region": cty.StringVal("us-east-1"),

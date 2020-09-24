@@ -24,22 +24,20 @@ import (
 // Spec struct contains the assertions described in .tfspec file
 type Spec struct {
 	Asserts          []*Assert
-	Refutes          []*Assert
+	Rejects          []*TypeName
 	Mocks            []*Mock
 	DataSourceReader *MockDataSourceReader
 }
 
 // Assert struct contains the definition of an assertion
 type Assert struct {
-	Type  string
-	Name  string
+	TypeName
 	Value cty.Value
 }
 
 // Mock struct contains the definition of mocked data resources
 type Mock struct {
-	Type  string
-	Name  string
+	TypeName
 	Query cty.Value
 	Data  cty.Value
 	Body  []byte
@@ -53,8 +51,26 @@ type Context struct {
 	WorkaroundOnce   sync.Once
 }
 
+type TypeName struct {
+	Type string
+	Name string
+}
+
+func NewAssert(aType, aName string, aValue cty.Value) *Assert {
+	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue}
+}
+
+func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
+	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
+}
+
 // Key return fully qualified name of an Assert
 func (a *Assert) Key() string {
+	return fmt.Sprintf("%s.%s", a.Type, a.Name)
+}
+
+// Key return fully qualified name
+func (a *TypeName) Key() string {
 	return fmt.Sprintf("%s.%s", a.Type, a.Name)
 }
 
@@ -102,7 +118,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 				continue
 			}
 
-			change, err := resource.After.Decode(assert.Value.Type())
+			change, err := resource.After.Decode(untransformType(assert.Value.Type()))
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
 			}
@@ -261,9 +277,14 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Name   string   `hcl:"name,label"`
 		Config hcl.Body `hcl:",remain"`
 	}
+	type reject struct {
+		Type   string   `hcl:"type,label"`
+		Name   string   `hcl:"name,label"`
+		Config hcl.Body `hcl:",remain"`
+	}
 	type root struct {
 		Asserts []*assert `hcl:"assert,block"`
-		Refutes []*assert `hcl:"refute,block"`
+		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
 	}
@@ -285,15 +306,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		if diags.HasErrors() {
 			return nil, diags
 		}
-		parsed.Asserts = append(parsed.Asserts, &Assert{Name: assert.Name, Type: assert.Type, Value: val})
+		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val))
 	}
 
-	for _, assert := range r.Refutes {
-		val, diags := decodeBody(&assert.Config, assert.Type, schemas)
-		if diags.HasErrors() {
-			return nil, diags
-		}
-		parsed.Refutes = append(parsed.Refutes, &Assert{Name: assert.Name, Type: assert.Type, Value: val})
+	for _, assert := range r.Rejects {
+		parsed.Rejects = append(parsed.Rejects, &TypeName{Name: assert.Name, Type: assert.Type})
 	}
 	for _, mock := range r.Mocks {
 		query, mocked, diags := decodeMockBody(mock.Config, mock.Type, schemas)
@@ -304,7 +321,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		if r, ok := mock.Config.(*hclsyntax.Body); ok {
 			body = r.Range().SliceBytes(file.Bytes)
 		}
-		parsed.Mocks = append(parsed.Mocks, &Mock{Name: mock.Name, Type: mock.Type, Query: query, Data: mocked, Body: body})
+		parsed.Mocks = append(parsed.Mocks, NewMock(mock.Type, mock.Name, query, mocked, body))
 	}
 
 	return parsed, diags
@@ -323,6 +340,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 		}
 	} else {
 		schema := laxSchema(LookupProviderSchema(schemas, provName))
+		schema = transformSchema(schema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
@@ -375,6 +393,56 @@ func laxSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
 	}
 	return laxed
 }
+
+// transformSchema upgrades the given schema by adding it support for reject blocks
+func transformSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
+	transformed := &terraform.ProviderSchema{ResourceTypes: make(map[string]*configschema.Block, len(schema.ResourceTypes))}
+	for k, rt := range schema.ResourceTypes {
+		transformed.ResourceTypes[k] = transformBlock(rt) //.NoneRequired()
+	}
+	return transformed
+}
+
+// transformBlock modifies a block definition by adding it support for reject blocks
+func transformBlock(original *configschema.Block) *configschema.Block {
+	transformed := &configschema.Block{}
+	transformed.Attributes = make(map[string]*configschema.Attribute, len(original.Attributes))
+	rejects := &configschema.NestedBlock{MaxItems: 0, MinItems: 0, Nesting: configschema.NestingSingle}
+	rejects.BlockTypes = make(map[string]*configschema.NestedBlock, len(original.BlockTypes))
+	for k, v := range original.Attributes {
+		transformed.Attributes[k] = v
+	}
+
+	transformed.BlockTypes = make(map[string]*configschema.NestedBlock, len(original.BlockTypes)+1)
+	for k, v := range original.BlockTypes {
+		t := transformBlock(&v.Block)
+		transformed.BlockTypes[k] = &configschema.NestedBlock{Block: *t, MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
+		rejects.BlockTypes[k] = &configschema.NestedBlock{Block: *t, MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
+	}
+	if len(rejects.BlockTypes) > 0 {
+		transformed.BlockTypes["reject"] = rejects
+	}
+
+	return transformed
+}
+
+// untransformType remove "reject" attributes from type definition
+func untransformType(t cty.Type) cty.Type {
+	if !t.IsObjectType() {
+		return t
+	}
+	if _, ok := t.AttributeTypes()["reject"]; !ok {
+		return t
+	}
+	proto := make(map[string]cty.Type, len(t.AttributeTypes())-1)
+	for k, v := range t.AttributeTypes() {
+		if k != "reject" {
+			proto[k] = untransformType(v)
+		}
+	}
+	return cty.Object(proto)
+}
+
 func toMockSchema(schema *configschema.Block) *configschema.Block {
 	laxed := schema.NoneRequired()
 	mocked := &configschema.Block{
