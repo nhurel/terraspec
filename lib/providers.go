@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"runtime"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
+	svchost "github.com/hashicorp/terraform-svchost"
 	"github.com/hashicorp/terraform/addrs"
 	terraformProvider "github.com/hashicorp/terraform/builtin/providers/terraform"
 	"github.com/hashicorp/terraform/plugin"
@@ -62,16 +64,48 @@ func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
 	return uc
 }
 
+// parseProviderValues retrives the values for hostname, namespace and provider name from the path.
+func parseProviderValues(providerPath string) (*addrs.Provider, error) {
+	parts := strings.Split(filepath.ToSlash(providerPath), "/")
+	
+	partCount := len(parts)
+	if partCount < 6 {
+		return nil, fmt.Errorf("No valid provider path: %s", providerPath)
+	}
+
+	return &addrs.Provider{
+		Hostname: svchost.Hostname(parts[partCount-6]),
+		Namespace: parts[partCount-5],
+		Type: parts[partCount-4],
+	}, nil
+}
+
 // BuildProviderResolver returns a ProviderResolver able to find all providers
 // provided by plugins
 func BuildProviderResolver(dir string) (*ProviderResolver, error) {
-	var pluginDir = path.Join(dir, fmt.Sprintf(".terraform/plugins/%s_%s", runtime.GOOS, runtime.GOARCH))
-
-	pluginMetaSet := discovery.FindPlugins(plugin.ProviderPluginName, []string{pluginDir})
+	
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
-	for k := range pluginMetaSet {
-		pluginsSchema[addrs.NewDefaultProvider(k.Name)] = k
+	// find plugins in project dir
+	projectPluginDir := path.Join(dir, ".terraform/plugins/")
+
+	projectPluginFolders := make([]string, 0)
+	filepath.Walk(projectPluginDir, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			projectPluginFolders = append(projectPluginFolders, path)
+		}
+
+		return nil
+	})
+
+	projectPluginMetaSet := discovery.FindPlugins(plugin.ProviderPluginName, projectPluginFolders)
+	for k := range projectPluginMetaSet {
+		provAddr, err := parseProviderValues(k.Path)
+		if err != nil {
+			return nil, err
+		}
+		provider := addrs.NewProvider(provAddr.Hostname, provAddr.Namespace, k.Name)
+		pluginsSchema[provider] = k
 	}
 	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
 }

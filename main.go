@@ -60,10 +60,16 @@ func main() {
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
+	exitCode := execTerraspec(*specDir, *displayPlan, *tfVersion)
+	
+	os.Exit(exitCode)
+}
+
+func execTerraspec(specDir string, displayPlan bool, tfVersion string) int {
 	var newSemVer *goversion.Version
 	var err error
-	if *tfVersion != "" {
-		newSemVer, err = goversion.NewSemver(*tfVersion)
+	if tfVersion != "" {
+		newSemVer, err = goversion.NewSemver(tfVersion)
 		if err != nil {
 			log.Fatalf("Invalid value for claim-version flag : %v", err)
 		}
@@ -73,9 +79,9 @@ func main() {
 
 	log.SetFlags(0)
 
-	testCases := findCases(*specDir)
+	testCases := findCases(specDir)
 	if len(testCases) == 0 {
-		log.Fatalf("No test case found in %s directory\n", *specDir)
+		log.Fatalf("No test case found in %s directory\n", specDir)
 	}
 
 	reports := make(chan *testReport)
@@ -110,7 +116,7 @@ func main() {
 		} else {
 			success++
 		}
-		if *displayPlan {
+		if displayPlan {
 			fmt.Println(r.plan)
 		}
 		printDiags(r.report)
@@ -119,7 +125,8 @@ func main() {
 	if tfversion.SemVer != tsCtx.TerraformVersion {
 		colorstring.Printf("[bold][yellow]Terraform version %s substitued with provided one %s\n", tsCtx.TerraformVersion.String(), tsCtx.UserVersion.String())
 	}
-	os.Exit(exitCode)
+
+	return exitCode
 }
 
 func runTestCase(tc *testCase, tsCtx *terraspec.Context, results chan<- *testReport) {
