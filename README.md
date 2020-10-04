@@ -40,6 +40,27 @@ assert "output" "output-name" {
 }
 ```
 
+You can also check a resource won't be created with this syntax : 
+```
+reject "aws_instance" "another-server" {}
+```
+
+Or you can check a resource will be created **without** specific configuration, eg : 
+ ```
+assert "aws_instance" "my-server" { // resource my-server must exist
+
+  reject {
+    // my-server must not have any ebs_block_device set
+    ebs_block_device{} 
+
+    // my-server must not have any credit_specification with cpu_credits set to "unlimited"
+    credit_specification{
+      cpu_credits = "unlimited" 
+    }
+  }
+}
+```
+
 ### Mock data resource
 
 If your configuration contains `data` resource, you can mock their value by writing a `mock` resource in your spec file. A `mock` resource must have the exact same configuration block as the `data` resource. The data you want to return must be set in a `return` block.
@@ -110,9 +131,10 @@ This makes `terraspec` able to validate any configuration, whichever cloud provi
 Terraspec is still at its early stages and doesn't cover all cases yet. Here are the known limitations identified so far.
 
 
-### Negative assertions
+### Workspace support
 
-Checking a resource is created with correct parameters is currently supported. Checking a resource is **not** created, or checking a created resource **doesn't** contain a specific `block` is under development.
+At the moment the variable `terraform.workspace` is not supported
+
 
 ### Terraform version constraints
 
