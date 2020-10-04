@@ -398,7 +398,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 
 	for _, assert := range r.Asserts {
-		val, diags := decodeBody(&assert.Config, assert.Type, schemas)
+		val, diags := decodeBody(assert.Config, assert.Type, schemas)
 		if diags.HasErrors() {
 			return nil, diags
 		}
@@ -423,7 +423,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	return parsed, diags
 }
 
-func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (cty.Value, hcl.Diagnostics) {
+func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (cty.Value, hcl.Diagnostics) {
 	rawType := resourceType(bodyType)
 	provName := strings.Split(rawType, "_")[0]
 	var val cty.Value
@@ -440,7 +440,7 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
-	val, diags := hcldec.Decode(*body, partialSchema.DecoderSpec(), nil)
+	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), nil)
 	return val, diags
 }
 
