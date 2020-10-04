@@ -128,6 +128,16 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 		}
 	}
 
+	for _, reject := range s.Rejects {
+		fmt.Println(reject.Key())
+		resource := findResource(reject.Key(), plan.Changes.Resources)
+		if resource != nil {
+			diags = diags.Append(RejectErrorDiags(cty.GetAttrPath(reject.Key()), reject, resource))
+		} else {
+			diags = diags.Append(RejectSuccessDiags(cty.GetAttrPath(reject.Key()), "Resource not created", reject))
+		}
+	}
+
 	return diags, nil
 }
 
@@ -204,6 +214,10 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		childIndex := 0
 		for it.Next() {
 			key, value := it.Element()
+			if key.Type() == cty.String && key.AsString() == "reject" {
+				diags = diags.Append(checkReject(path.GetAttr(key.AsString()), value, got))
+				continue
+			}
 			if IsNull(value) {
 				continue //skip attributes with no spec
 			}
@@ -225,6 +239,88 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		return diags
 	}
 
+	return diags
+}
+
+// checkAssertAmong will test assertion among all element in given ElementIterator and only return
+// the diagnostict for the closest match
+func checkAssertAmong(path cty.Path, expected cty.Value, got cty.ElementIterator) tfdiags.Diagnostics {
+	var closestDiags, diags tfdiags.Diagnostics
+	// looping over a set or an array:
+	for got.Next() {
+		_, g := got.Element()
+		diags = checkAssert(path, expected, g)
+		if closestDiags == nil {
+			closestDiags = diags
+		} else {
+			if Compare(closestDiags, diags) > 0 {
+				closestDiags = diags
+			}
+		}
+		if !closestDiags.HasErrors() {
+			break // early break as soon as there's a successDiags
+		}
+	}
+	return closestDiags
+}
+
+func checkReject(path cty.Path, rejected, got cty.Value) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+	if rejected.CanIterateElements() && !rejected.IsNull() {
+		it := rejected.ElementIterator()
+		for it.Next() {
+			key, value := it.Element()
+			if value.IsNull() || IsEmptyCollection(value) {
+				continue
+			}
+			found := findAttribute(key, got)
+			if IsNull(value) {
+				// If value is nil, it means that the rejected property is only defined as an empty block
+				if !IsNull(found) {
+					errorElement := cty.ObjectVal(map[string]cty.Value{key.AsString(): found})
+					diags = diags.Append(RejectErrorDiags(path.GetAttr(key.AsString()), key.AsString(), string(MarshalValue(errorElement))))
+				} else {
+					diags = diags.Append(RejectSuccessDiags(path.GetAttr(key.AsString()), fmt.Sprintf("No attribute matching %v", key.AsString()), value))
+				}
+			} else {
+				if value.Type().IsListType() || value.Type().IsSetType() {
+					diags = diags.Append(checkRejectCollection(path, key, value, found))
+				} else {
+					assertDiags := checkAssert(path.GetAttr(key.AsString()), value, found)
+					if assertDiags.HasErrors() {
+						//this means checkAssert is wrong, so found block doesn't match the reject block : it's a success
+						diags = diags.Append(RejectSuccessDiags(path, fmt.Sprintf("No attribute matching %v definition", key.AsString()), value))
+					} else {
+						//this means checkAssert is correct, so found block matches the reject block : it's an error
+						diags = diags.Append(RejectValueErrorDiags(path, key, value, found))
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// checkRejectCollection will check all rejections of a colllection type
+func checkRejectCollection(path cty.Path, key cty.Value, reject, found cty.Value) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+	if reject.CanIterateElements() {
+		it := reject.ElementIterator()
+		for it.Next() {
+			_, r := it.Element()
+			var assertDiags tfdiags.Diagnostics
+			if found.Type().IsSetType() || found.Type().IsListType() {
+				assertDiags = checkAssertAmong(path, r, found.ElementIterator())
+			}
+			if assertDiags.HasErrors() {
+				//this means checkAssert is wrong, so found block doesn't match the reject block : it's a success
+				diags = diags.Append(RejectSuccessDiags(path, fmt.Sprintf("No attribute matching %v definition", key.AsString()), r))
+			} else {
+				//this means checkAssert is correct, so found block matches the reject block : it's an error
+				diags = diags.Append(RejectValueErrorDiags(path, key, r, found))
+			}
+		}
+	}
 	return diags
 }
 
@@ -417,7 +513,7 @@ func transformBlock(original *configschema.Block) *configschema.Block {
 	for k, v := range original.BlockTypes {
 		t := transformBlock(&v.Block)
 		transformed.BlockTypes[k] = &configschema.NestedBlock{Block: *t, MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
-		rejects.BlockTypes[k] = &configschema.NestedBlock{Block: *t, MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
+		rejects.BlockTypes[k] = &configschema.NestedBlock{Block: *t.NoneRequired(), MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
 	}
 	if len(rejects.BlockTypes) > 0 {
 		transformed.BlockTypes["reject"] = rejects

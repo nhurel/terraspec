@@ -57,6 +57,9 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
 
       reject {
         ebs_block_device{}
+        credit_specification{
+          cpu_credits = "unlimited"
+        }
       }
 
 }

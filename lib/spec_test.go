@@ -319,6 +319,163 @@ func TestCheckAssert(t *testing.T) {
 
 }
 
+func TestCheckReject(t *testing.T) {
+
+	valueA := cty.ObjectVal(map[string]cty.Value{
+		"name":  cty.StringVal("a"),
+		"value": cty.NumberIntVal(1),
+	})
+	valueB := cty.ObjectVal(map[string]cty.Value{
+		"name":  cty.StringVal("b"),
+		"value": cty.NumberIntVal(2),
+	})
+	valueC := cty.ObjectVal(map[string]cty.Value{
+		"name":  cty.StringVal("c"),
+		"value": cty.NumberIntVal(3),
+	})
+	gotSet := cty.SetVal([]cty.Value{valueA, valueB, valueC})
+
+	gotList := cty.ListVal([]cty.Value{valueA, valueB, valueC})
+
+	valueO := cty.ObjectVal(map[string]cty.Value{
+		"name":  cty.StringVal("o"),
+		"value": cty.NumberIntVal(15),
+	})
+	got := cty.ObjectVal(map[string]cty.Value{
+		"set_block":    gotSet,
+		"list_block":   gotList,
+		"object_block": valueO,
+	})
+
+	tests := map[string]struct {
+		rejection      cty.Value
+		expectError    bool
+		rejectAttrName string
+		expectFound    cty.Value
+		expectErrorKey cty.Value
+		expectedResult tfdiags.Diagnostics
+	}{
+		"reject_first_block": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"set_block": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("a"),
+					"value": cty.NullVal(cty.Number),
+				})}),
+			}),
+			expectError:    true,
+			rejectAttrName: "set_block",
+			expectFound:    gotSet,
+			expectErrorKey: cty.StringVal("set_block"),
+		},
+		"reject_second_block": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"set_block": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("b"),
+					"value": cty.NullVal(cty.Number),
+				})}),
+			}),
+			expectError:    true,
+			rejectAttrName: "set_block",
+			expectFound:    gotSet,
+			expectErrorKey: cty.StringVal("set_block"),
+		},
+		"reject_success_block": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"set_block": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("b"),
+					"value": cty.NumberIntVal(1),
+				})}),
+			}),
+			expectError:    false,
+			rejectAttrName: "set_block",
+			expectErrorKey: cty.StringVal("set_block"),
+		},
+		"reject_first_list": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"list_block": cty.ListVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("a"),
+					"value": cty.NullVal(cty.Number),
+				})}),
+			}),
+			expectError:    true,
+			rejectAttrName: "list_block",
+			expectFound:    gotList,
+			expectErrorKey: cty.StringVal("list_block"),
+		},
+		"reject_third_list": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"list_block": cty.ListVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.NullVal(cty.String),
+					"value": cty.NumberIntVal(3),
+				})}),
+			}),
+			expectError:    true,
+			rejectAttrName: "list_block",
+			expectFound:    gotList,
+			expectErrorKey: cty.StringVal("list_block"),
+		},
+		"reject_success_list": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"list_block": cty.ListVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("b"),
+					"value": cty.NumberIntVal(1),
+				})}),
+			}),
+			expectError:    false,
+			rejectAttrName: "list_block",
+			expectErrorKey: cty.StringVal("list_block"),
+		},
+		"reject_object": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"object_block": cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("o"),
+					"value": cty.NumberIntVal(15),
+				}),
+			}),
+			expectError:    true,
+			rejectAttrName: "object_block",
+			expectFound:    valueO,
+			expectErrorKey: cty.StringVal("object_block"),
+		},
+		"reject_success_object": {
+			rejection: cty.ObjectVal(map[string]cty.Value{
+				"object_block": cty.ObjectVal(map[string]cty.Value{
+					"name":  cty.StringVal("o"),
+					"value": cty.NumberIntVal(3),
+				}),
+			}),
+			expectError:    false,
+			rejectAttrName: "object_block",
+			expectErrorKey: cty.StringVal("object_block"),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := checkReject(cty.GetAttrPath("property").GetAttr("reject"), tt.rejection, got)
+			if tt.expectError {
+				att := tt.rejection.GetAttr(tt.rejectAttrName)
+				if att.Type().IsListType() || att.Type().IsSetType() {
+					it := att.ElementIterator()
+					it.Next()
+					_, att = it.Element()
+				}
+				expected := RejectValueErrorDiags(cty.GetAttrPath("property").GetAttr("reject"), tt.expectErrorKey, att, tt.expectFound)
+				if len(result) != 1 {
+					t.Fatalf("Expected 1 error diagnostic, got %v", result)
+				}
+				testDiagnostic(t, result[0], expected)
+			} else {
+				expected := RejectSuccessDiags(cty.GetAttrPath("property").GetAttr("reject"), fmt.Sprintf("No attribute matching %v definition", tt.expectErrorKey.AsString()), nil)
+				if len(result) != 1 {
+					t.Fatalf("Expected 1 error diagnostic, got %v", result)
+				}
+				testDiagnostic(t, result[0], expected)
+			}
+		})
+	}
+}
+
 func TestCheckOutput(t *testing.T) {
 
 	var path = cty.Path{}.GetAttr("test").GetAttr("output_value")

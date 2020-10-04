@@ -36,6 +36,9 @@ func IsNull(val cty.Value) bool {
 		return true
 	}
 	if val.CanIterateElements() {
+		if !val.IsKnown() {
+			return true
+		}
 		it := val.ElementIterator()
 		for it.Next() {
 			_, v := it.Element()
@@ -44,6 +47,14 @@ func IsNull(val cty.Value) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+// IsEmptyCollection returns true if value is a collection type of length 0
+func IsEmptyCollection(value cty.Value) bool {
+	if value.Type().IsListType() || value.Type().IsSetType() {
+		return value.AsValueSet().Length() == 0
 	}
 	return false
 }
