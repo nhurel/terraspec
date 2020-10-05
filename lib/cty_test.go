@@ -143,25 +143,57 @@ func TestMarshalValue(t *testing.T) {
 			},
 			),
 			expected: ` {
-              filter = [{ 
+              filter = [
+				{ 
                   name = "name"
-                  values = ["amzn-ami-hvm-*-x86_64-gp2"] 
-                 }, {
+                  values = [
+					  "amzn-ami-hvm-*-x86_64-gp2"
+					] 
+				}
+				,  {
                   name = "owner-alias"
-                  values = ["amazon"] 
-               }]
+                  values = [
+					  "amazon"
+					  ] 
+			   }
+
+			   ]
               most_recent = true
-              owners      = ["amazon"]
-            }
-            `,
+              owners      = [
+				  "amazon"
+				  ]
+			}
+`,
+		},
+		"partially_known_block": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"name":              cty.StringVal("known"),
+				"unknown_primitive": cty.UnknownVal(cty.Number),
+				"partial_list": cty.ListVal([]cty.Value{
+					cty.ObjectVal(map[string]cty.Value{
+						"name":   cty.StringVal("known"),
+						"unkown": cty.UnknownVal(cty.String),
+					}),
+				}),
+			}),
+			expected: `{
+				name = "known"
+				partial_list = [
+					{
+						name = "known"
+					}
+					
+				]
+				}
+				`,
 		},
 	}
 	for k, tt := range tests {
 		t.Run(k, func(t *testing.T) {
-			e := strings.ReplaceAll(tt.expected, " ", "")
+			e := strings.ReplaceAll(strings.ReplaceAll(tt.expected, " ", ""), "\t", "")
 			got := string(terraspec.MarshalValue(tt.given))
-			if g := strings.ReplaceAll(string(got), " ", ""); g != e {
-				t.Errorf("Value not marshalled as expected.\nGot : [%s]\nWant : [%s]", got, tt.expected)
+			if g := strings.ReplaceAll(strings.ReplaceAll(string(got), " ", ""), "\t", ""); g != e {
+				t.Errorf("Value not marshalled as expected.\nGot : [%s]\nWant : [%s]", g, e)
 			}
 		})
 	}
