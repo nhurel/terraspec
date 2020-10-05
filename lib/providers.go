@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"runtime"
 
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -90,8 +91,9 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	projectPluginDir := path.Join(dir, ".terraform/plugins/")
 
 	projectPluginFolders := make([]string, 0)
+	osArch := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 	filepath.Walk(projectPluginDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
+		if info.IsDir() && info.Name() == osArch {
 			projectPluginFolders = append(projectPluginFolders, path)
 		}
 
