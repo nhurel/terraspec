@@ -1,4 +1,4 @@
-package terraspec
+package integrationtests
 
 import (
 	"os"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/stretchr/testify/assert"
+	terraspec "github.com/nhurel/terraspec/lib"
 )
 
 func TestBuildProviderResolverFindsLegacyProviderInHome(t *testing.T) {
@@ -18,7 +19,7 @@ func TestBuildProviderResolverFindsLegacyProviderInHome(t *testing.T) {
 
 	provider, providerVersion, providerPath := InstallLegacyProvider(t)
 
-	cleanupTerraform := TerraformInit(t, "testdata/test_project")
+	cleanupTerraform := TerraformInit(t, "test_project")
 	defer cleanupTerraform()
 
 	cwd, err := os.Getwd()
@@ -36,7 +37,7 @@ func TestBuildProviderResolverFindsLegacyProviderInHome(t *testing.T) {
 	awsPath := filepath.FromSlash(path.Join(projectPluginFolder, "registry.terraform.io", "hashicorp", "aws", "3.8.0", osArch, awsFileName))
 	
 
-	providerResolver, err := BuildProviderResolver(".")
+	providerResolver, err := terraspec.BuildProviderResolver(".")
 	assert.Nil(t, err)
 
 	providerMetaCloudfoundry := providerResolver.KnownPlugins[provider]

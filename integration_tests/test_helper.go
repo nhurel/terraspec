@@ -1,4 +1,4 @@
-package terraspec
+package integrationtests
 
 import (
 	"archive/zip"

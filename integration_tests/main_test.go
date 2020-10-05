@@ -1,4 +1,4 @@
-package main
+package integrationtests
 
 import (
 	"testing"
@@ -9,15 +9,15 @@ import (
 
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 	// backup the plugin folder and create an empty one
-	_, restorePluginFolder := terraspec.EnsureEmptyPluginFolder(t)
+	_, restorePluginFolder := EnsureEmptyPluginFolder(t)
 	defer restorePluginFolder()
 
-	_, _, _ = terraspec.InstallLegacyProvider(t)
+	_, _, _ = InstallLegacyProvider(t)
 
-	cleanupTerraform := terraspec.TerraformInit(t, "lib/testdata/test_project")
+	cleanupTerraform := TerraformInit(t, "test_project")
 	defer cleanupTerraform()
 	
-	result := execTerraspec("spec", false, "")
+	result := terraspec.ExecTerraspec("spec", false, "")
 
 	assert.Equal(t, 0, result)
 }
