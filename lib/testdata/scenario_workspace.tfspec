@@ -1,0 +1,22 @@
+terraspec {
+    workspace = "development"
+}
+
+assert "ressource_type" "name" {
+    property = terraspec.workspace
+    inner {
+        inner_prop = terraspec.workspace
+    }
+}
+
+refute "output" "name" {
+    value = terraspec.workspace
+}
+
+mock "data_type" "name"{
+    query = 0
+    return {
+        id = 12345
+        name = terraspec.workspace
+    }
+}

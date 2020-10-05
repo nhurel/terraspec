@@ -1,0 +1,9 @@
+terraspec {
+  workspace = "somevalue"
+}
+
+assert "aws_vpc" "test" {
+  tags = {
+    workspace = terraspec.workspace
+  }
+}

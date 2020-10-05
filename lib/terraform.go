@@ -16,7 +16,7 @@ import (
 
 // NewContext creates a new terraform.Context able to compute configs in the context of terraspec
 // It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context) (*terraform.Context, tfdiags.Diagnostics) {
+func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context, workspace string) (*terraform.Context, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -64,6 +64,9 @@ func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context)
 		Providers:    providers,
 		Provisioners: ProvisionersFactory(),
 		Variables:    variables,
+		Meta: &terraform.ContextMeta{
+			Env: workspace,
+		},
 	}
 
 	return terraform.NewContext(opts)

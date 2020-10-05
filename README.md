@@ -69,7 +69,28 @@ mock "aws_vpcs" "selected" {
 }
 ```
 
+### Terraform Workspace
 
+If you want to use the terraform workspace feature in terraspec you need to first configure which workspace value to use. You can do this in a spec global element `terraspec`:
+
+__default.tfspec__
+```hcl
+# define which workspace you want to test
+terraspec {
+    workspace = "development"
+}
+
+# use the workspace value in your test assertions or anywhere else
+assert "aws_vpc" "test_vpc" {
+    tags = {
+        "env": terraspec.workspace
+    }
+}
+```
+
+The stated workspace value will also be injected into the terraform configuration that is tested.
+
+See also [examples/workspace](examples/workspace).
 
 ### Run 
 

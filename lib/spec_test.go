@@ -11,7 +11,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-func TestParsing(t *testing.T) {
+func readSpecWithSchemas(t *testing.T, tfSpecFile string) *Spec {
 	schemas := &terraform.Schemas{
 		Providers: map[addrs.Provider]*terraform.ProviderSchema{
 			addrs.NewDefaultProvider("ressource"): {
@@ -50,13 +50,74 @@ func TestParsing(t *testing.T) {
 			},
 		},
 	}
-	spec, diags := ReadSpec("testdata/scenario.tfspec", schemas)
+	spec, diags := ReadSpec(tfSpecFile, schemas)
 	if diags.HasErrors() {
-		t.Fatal(diags.Err())
+		t.Fatal(diags.ErrWithWarnings())
 	}
 
 	if spec == nil {
 		t.Fatal("spec is nil")
+	}
+
+	return spec
+}
+
+func TestParsingWithWorkspace(t *testing.T) {
+	spec := readSpecWithSchemas(t, "testdata/scenario_workspace.tfspec")
+
+	if spec.Terraspec.Workspace != "development" {
+		t.Errorf("terraspec workspace should be development")
+	}
+
+	if len(spec.Asserts) != 1 {
+		t.Fatalf("Number of asserts not equal 1")
+	}
+
+	expectedAssert := cty.ObjectVal(
+		map[string]cty.Value{
+			"property": cty.StringVal(spec.Terraspec.Workspace),
+			"inner": cty.ObjectVal(
+				map[string]cty.Value{
+					"inner_prop": cty.StringVal(spec.Terraspec.Workspace),
+				}),
+		},
+	)
+	if !spec.Asserts[0].Value.RawEquals(expectedAssert) {
+		t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", spec.Asserts[0].Value.GoString(), expectedAssert.GoString())
+	}
+
+	if len(spec.Refutes) != 1 {
+		t.Fatalf("Number of refutes not equal 1")
+	}
+
+	expectedRefute := cty.ObjectVal(map[string]cty.Value{
+		"value": cty.StringVal(spec.Terraspec.Workspace),
+	})
+	if !spec.Refutes[0].Value.RawEquals(expectedRefute) {
+		t.Errorf("refute.Value not as expected. \nGot %s\nWant %s", spec.Refutes[0].Value.GoString(), expectedRefute.GoString())
+	}
+
+	if len(spec.Mocks) != 1 {
+		t.Fatalf("Number of mocks not equal 1")
+	}
+
+	expectedMock := cty.ObjectVal(
+		map[string]cty.Value{
+			"id":    cty.NumberIntVal(12345),
+			"name":  cty.StringVal(spec.Terraspec.Workspace),
+			"query": cty.NumberIntVal(0),
+		},
+	)
+	if !spec.Mocks[0].Data.RawEquals(expectedMock) {
+		t.Errorf("mock.Data not as expected. \nGot %s\nWant %s", spec.Mocks[0].Data.GoString(), expectedMock.GoString())
+	}
+}
+
+func TestParsingNoWorkspace(t *testing.T) {
+	spec := readSpecWithSchemas(t, "testdata/scenario.tfspec")
+
+	if spec.Terraspec.Workspace != "" {
+		t.Errorf("terraspec workspace should be empty")
 	}
 
 	if nb := len(spec.Asserts); nb != 1 {
