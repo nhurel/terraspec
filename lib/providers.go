@@ -18,10 +18,11 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// ProviderResolver is reponsible for finding all provider implementations that can be instanciated
+// ProviderResolver is responsible for finding all provider implementations that can be instanciated
 type ProviderResolver struct {
 	KnownPlugins     map[addrs.Provider]discovery.PluginMeta
 	DataSourceReader *MockDataSourceReader
+	ResourceReader   *ExceptedResourceReader
 }
 
 // MockDataSourceReader can mock a call to ReadDataSource and return appropriate mocked data
@@ -62,6 +63,18 @@ func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
 	return uc
 }
 
+// ExceptResourceReader can expect a state of a Resource and return appropriate mocked data
+type ExceptedResourceReader struct {
+	expectedResources []*Expect
+	unmatchedCalls    []cty.Value // we don't need it maybe
+	mux               sync.RWMutex
+}
+
+// SetExpect populates expect data
+func (m *ExceptedResourceReader) SetExpect(expectations []*Expect) {
+	m.expectedResources = expectations
+}
+
 // BuildProviderResolver returns a ProviderResolver able to find all providers
 // provided by plugins
 func BuildProviderResolver(dir string) (*ProviderResolver, error) {
@@ -73,7 +86,11 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	for k := range pluginMetaSet {
 		pluginsSchema[addrs.NewDefaultProvider(k.Name)] = k
 	}
-	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
+	return &ProviderResolver{
+		KnownPlugins: pluginsSchema,
+		DataSourceReader: &MockDataSourceReader{},
+		ResourceReader: &ExceptedResourceReader{},
+	}, nil
 }
 
 func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
@@ -101,23 +118,32 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Factory {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
-		result[k] = buildFactory(p, r.DataSourceReader)
+		result[k] = buildFactory(p, r.DataSourceReader, r.ResourceReader)
 	}
 
 	tfProvider := terraformProvider.NewProvider()
-	result[addrs.NewBuiltInProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, tfProvider)
+	result[addrs.NewBuiltInProvider("terraform")] = buildWrappedFactory(discovery.PluginMeta{Name: "terraform"}, r.DataSourceReader, r.ResourceReader, tfProvider)
 	return result
 }
 
-func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader) providers.Factory {
+func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, rProvider *ExceptedResourceReader) providers.Factory {
 	return func() (providers.Interface, error) {
-		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider}, nil
+		return &ProviderInterface{
+			pluginMeta: p,
+			dataSourceProvider: dsProvider,
+			resourceProvider: rProvider,
+		}, nil
 	}
 }
 
-func buildWrappedFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, wrapped providers.Interface) providers.Factory {
+func buildWrappedFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, rProvider *ExceptedResourceReader, wrapped providers.Interface) providers.Factory {
 	return func() (providers.Interface, error) {
-		return &WrappedProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider, wrapped: wrapped}, nil
+		return &WrappedProviderInterface{
+			pluginMeta: p,
+			dataSourceProvider: dsProvider,
+			resourceProvider: rProvider,
+			wrapped: wrapped,
+		}, nil
 	}
 }
 
@@ -126,8 +152,10 @@ func buildWrappedFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReade
 type ProviderInterface struct {
 	pluginMeta         discovery.PluginMeta
 	dataSourceProvider *MockDataSourceReader
+	resourceProvider   *ExceptedResourceReader
 	_plugin            *plugin.GRPCProvider
 	lock               sync.Mutex
+
 }
 
 var _ providers.Interface = (*ProviderInterface)(nil)
@@ -201,9 +229,9 @@ func (m *ProviderInterface) ValidateDataSourceConfig(req providers.ValidateDataS
 // instance state whose schema version is less than the one reported by the
 // currently-used version of the corresponding provider, and the upgraded
 // result is used for any further processing.
-func (m *ProviderInterface) UpgradeResourceState(req providers.UpgradeResourceStateRequest) providers.UpgradeResourceStateResponse {
+func (m *ProviderInterface) UpgradeResourceState(req providers.UpgradeResourceStateRequest) (resp providers.UpgradeResourceStateResponse) {
 	// FIXME Hopefully this will never be required
-	// Make sure terraspec is always run from an empty state (may need to override the backend)
+	// Make sure terraspec is always run from an empty state (may need to override the backend
 	return providers.UpgradeResourceStateResponse{}
 }
 
@@ -227,7 +255,7 @@ func (m *ProviderInterface) Stop() error {
 }
 
 // ReadResource refreshes a resource and returns its current state.
-func (m *ProviderInterface) ReadResource(req providers.ReadResourceRequest) providers.ReadResourceResponse {
+func (m *ProviderInterface) ReadResource(req providers.ReadResourceRequest) (resp providers.ReadResourceResponse) {
 	return providers.ReadResourceResponse{}
 }
 
@@ -240,6 +268,15 @@ func (m *ProviderInterface) PlanResourceChange(req providers.PlanResourceChangeR
 		s.Diagnostics = s.Diagnostics.Append(err)
 	} else {
 		s = p.PlanResourceChange(req)
+		var config cty.Value = req.Config
+		// Look for an expectation that fits to the config of this resource
+		// and update expected attributes
+		for _, expect := range m.resourceProvider.expectedResources {
+			if expect.Query.RawEquals(config) {
+				s.PlannedState = expect.Call()
+				break
+			}
+		}
 	}
 	return s
 }
@@ -284,6 +321,7 @@ func (m *ProviderInterface) Close() error {
 type WrappedProviderInterface struct {
 	pluginMeta         discovery.PluginMeta
 	dataSourceProvider *MockDataSourceReader
+	resourceProvider   *ExceptedResourceReader
 	wrapped            providers.Interface
 }
 
@@ -337,9 +375,10 @@ func (w *WrappedProviderInterface) Stop() error {
 	return w.wrapped.Stop()
 }
 
-// ReadResource refreshes a resource and returns its current state.
+// ReadDataSource returns the data source's current state.
 func (w *WrappedProviderInterface) ReadResource(req providers.ReadResourceRequest) providers.ReadResourceResponse {
-	return providers.ReadResourceResponse{}
+	//result := w.resourceProvider.ReadResource(req)
+	return providers.ReadResourceResponse{NewState: req.PriorState}
 }
 
 // PlanResourceChange takes the current state and proposed state of a

@@ -144,6 +144,10 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, results chan<- *testRep
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
+	ctxDiags = ctxDiags.Append(spec.ValidateExcepts())
+	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		return
+	}
 
 	log.SetOutput(os.Stderr)
 	var stdout = &strings.Builder{}
@@ -210,6 +214,12 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 		providerResolver.DataSourceReader.SetMock(spec.Mocks)
 	}
 	spec.DataSourceReader = providerResolver.DataSourceReader
+
+	//If spec contains expected resource attributes, they must be provided to the ResourceReader
+	if len(spec.Expects) > 0 {
+		providerResolver.ResourceReader.SetExpect(spec.Expects)
+	}
+	spec.ResourceReader = providerResolver.ResourceReader
 	return tfCtx, spec, ctxDiags
 }
 

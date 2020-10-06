@@ -26,7 +26,9 @@ type Spec struct {
 	Asserts          []*Assert
 	Rejects          []*TypeName
 	Mocks            []*Mock
+	Expects          []*Expect
 	DataSourceReader *MockDataSourceReader
+	ResourceReader   *ExceptedResourceReader
 	Terraspec        *TerraspecConfig
 }
 
@@ -70,6 +72,10 @@ func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
 	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
 }
 
+func NewExpect(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Expect {
+	return &Expect{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
+}
+
 // Key return fully qualified name of an Assert
 func (a *Assert) Key() string {
 	return fmt.Sprintf("%s.%s", a.Type, a.Name)
@@ -88,6 +94,30 @@ func (m *Mock) Call() cty.Value {
 
 // Called indicates if mock was called at least once
 func (m *Mock) Called() bool {
+	return m.calls > 0
+}
+
+type Expect struct {
+	TypeName
+	Query cty.Value
+	Data  cty.Value
+	Body  []byte
+	calls int
+}
+
+// Key return fully qualified name of an Expect
+func (e *Expect) Key() string {
+	return fmt.Sprintf("%s.%s", e.Type, e.Name)
+}
+
+// Call marks the mock as called and returns its data
+func (m *Expect) Call() cty.Value {
+	m.calls++
+	return m.Data
+}
+
+// Called indicates if mock was called at least once
+func (m *Expect) Called() bool {
 	return m.calls > 0
 }
 
@@ -123,7 +153,6 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 				diags = diags.Append(fmt.Errorf("Could not find resource %s in changes", assert.Key()))
 				continue
 			}
-
 			change, err := resource.After.Decode(untransformType(assert.Value.Type()))
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
@@ -169,6 +198,28 @@ func (s *Spec) ValidateMocks() tfdiags.Diagnostics {
 	return diags
 }
 
+
+// ValidateExcepts checks all expects were called as expected
+func (s *Spec) ValidateExcepts() (diags tfdiags.Diagnostics) {
+	var allMissedCalls string
+	for _, expect := range s.Expects {
+		if !expect.Called() {
+			if allMissedCalls == "" {
+				var sb strings.Builder
+				for _, call := range s.DataSourceReader.UnmatchedCalls() {
+					sb.Write(MarshalValue(call))
+					sb.WriteString("\n")
+				}
+				allMissedCalls = sb.String()
+			}
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(expect.Type).GetAttr(expect.Name), fmt.Sprintf("No resource matched :\n%s\nUncatched resource calls are :\n%s", string(expect.Body), allMissedCalls)))
+		} else {
+			diags = diags.Append(SuccessDiags(cty.GetAttrPath(expect.Type).GetAttr(expect.Name), fmt.Sprintf("expect has been called %d time(s)", expect.calls)))
+		}
+	}
+	return diags
+}
+
 func findOuput(name string, outputs []*plans.OutputChangeSrc) *plans.OutputChangeSrc {
 	for _, output := range outputs {
 		if name == output.Addr.String() {
@@ -177,6 +228,7 @@ func findOuput(name string, outputs []*plans.OutputChangeSrc) *plans.OutputChang
 	}
 	return nil
 }
+
 func findResource(name string, resources []*plans.ResourceInstanceChangeSrc) *plans.ResourceInstanceChangeSrc {
 	for _, resource := range resources {
 		if name == resource.Addr.String() {
@@ -377,6 +429,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Config    hcl.Body       `hcl:",remain"`
 		DependsOn hcl.Expression `hcl:"depends_on,attr"`
 	}
+	type expect struct {
+		Type      string         `hcl:"type,label"`
+		Name      string         `hcl:"name,label"`
+		Config    hcl.Body       `hcl:",remain"`
+	}
 	type mock struct {
 		Type   string   `hcl:"type,label"`
 		Name   string   `hcl:"name,label"`
@@ -391,8 +448,8 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Asserts []*assert `hcl:"assert,block"`
 		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
-		// Modules   []*Module   `hcl:"module,block"`
 		Terraspec *terraspec `hcl:"terraspec,block"`
+		Expects []*expect `hcl:"expect,block"`
 	}
 
 	var r root
@@ -441,6 +498,18 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 			body = r.Range().SliceBytes(file.Bytes)
 		}
 		parsed.Mocks = append(parsed.Mocks, NewMock(mock.Type, mock.Name, query, mocked, body))
+	}
+
+	for _, expect := range r.Expects {
+		query, expected, diags := decodeExpectBody(expect.Config, expect.Type, schemas)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		var body []byte
+		if r, ok := expect.Config.(*hclsyntax.Body); ok {
+			body = r.Range().SliceBytes(file.Bytes)
+		}
+		parsed.Expects = append(parsed.Expects, NewExpect(expect.Type, expect.Name, query, expected, body))
 	}
 
 	return parsed, diags
@@ -517,6 +586,38 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, 
 		}
 		return value, nil
 	})
+	if err != nil {
+		diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Detail: err.Error()})
+	}
+
+	return
+}
+
+func decodeExpectBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, expect cty.Value, diags hcl.Diagnostics) {
+	var codedExpect hcl.Body
+	provName := strings.Split(bodyType, "_")[0]
+	schema := LookupProviderSchema(schemas, provName)
+	partialSchema, _ := schema.SchemaForResourceType(addrs.ManagedResourceMode, bodyType)
+
+	query, codedExpect, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)
+	if diags.HasErrors() {
+		return
+	}
+	expectSchema := toMockSchema(partialSchema)
+	expect, moreDiags := hcldec.Decode(codedExpect, expectSchema.DecoderSpec(), nil)
+	diags = append(diags, moreDiags...)
+	if diags.HasErrors() {
+		return
+	}
+	expect = expect.GetAttr("return")
+
+	expect, err := cty.Transform(expect, func(path cty.Path, value cty.Value) (cty.Value, error) {
+		if value.IsNull() {
+			return path.Apply(query)
+		}
+		return value, nil
+	})
+
 	if err != nil {
 		diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Detail: err.Error()})
 	}
