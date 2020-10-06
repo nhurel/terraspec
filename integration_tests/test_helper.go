@@ -31,7 +31,7 @@ func getPluginFolder() (string, error) {
 		return filepath.FromSlash(fmt.Sprintf("%s/AppData/Roaming/terraform.d/plugins", homeDir)), nil
 	}
 
-	return filepath.FromSlash(fmt.Sprintf("%s/terraform.d/plugins", homeDir)), nil
+	return filepath.FromSlash(fmt.Sprintf("%s/.terraform.d/plugins", homeDir)), nil
 }
 
 // TerraformInit switches to and initializes the terraform project in the given path.
