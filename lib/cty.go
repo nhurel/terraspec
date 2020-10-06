@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -36,6 +37,9 @@ func IsNull(val cty.Value) bool {
 		return true
 	}
 	if val.CanIterateElements() {
+		if !val.IsKnown() {
+			return true
+		}
 		it := val.ElementIterator()
 		for it.Next() {
 			_, v := it.Element()
@@ -44,6 +48,14 @@ func IsNull(val cty.Value) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+// IsEmptyCollection returns true if value is a collection type of length 0
+func IsEmptyCollection(value cty.Value) bool {
+	if value.Type().IsListType() || value.Type().IsSetType() {
+		return value.AsValueSet().Length() == 0
 	}
 	return false
 }
@@ -74,12 +86,34 @@ func marshalValue(value cty.Value, writer *hclwrite.Body) {
 			}
 		}
 		if val.Type().IsListType() || val.Type().IsSetType() {
-			w.SetAttributeValue(key, val)
+			w.SetAttributeRaw(key, hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenOBrack, Bytes: []byte{'['}}})
+			it := val.ElementIterator()
+			it.Next()
+			for {
+				_, v := it.Element()
+				marshalValue(v, w)
+				if it.Next() {
+					w.AppendUnstructuredTokens(hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenComma, Bytes: []byte{','}}})
+				} else {
+					break
+				}
+			}
+			w.AppendNewline()
+			w.AppendUnstructuredTokens(hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenCBrack, Bytes: []byte{']'}}})
+			w.AppendNewline()
 			return false, nil
 		}
 
 		if val.Type().IsPrimitiveType() {
-			w.SetAttributeValue(key, val)
+			if val.IsKnown() {
+				if key != "" {
+					w.SetAttributeValue(key, val)
+				} else {
+					w.AppendUnstructuredTokens(hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenOQuote, Bytes: []byte{'"'}}})
+					w.AppendUnstructuredTokens(hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenStringLit, Bytes: []byte(fmt.Sprintf("%v", PrimitiveValue(val)))}})
+					w.AppendUnstructuredTokens(hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenCQuote, Bytes: []byte{'"'}}})
+				}
+			}
 		} else {
 			b := w.AppendNewBlock(key, nil)
 			w = b.Body()
@@ -87,5 +121,4 @@ func marshalValue(value cty.Value, writer *hclwrite.Body) {
 
 		return true, nil
 	})
-
 }

@@ -3,11 +3,14 @@ assert "ressource_type" "name" {
     inner {
         inner_prop = "value2"
     }
+    reject {
+        inner {
+            inner_prop = "bad_value"
+        }
+    }
 }
 
-refute "output" "name" {
-    value = "value"
-}
+reject "output" "name" {}
 
 mock "data_type" "name"{
     query = 12345

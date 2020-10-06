@@ -55,9 +55,11 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
 
       vpc_security_group_ids = ["123"]
 
-}
+      reject {
+        ebs_block_device{}
+        credit_specification{
+          cpu_credits = "unlimited"
+        }
+      }
 
-refute "module.ec2-instance.aws_instance" "this[0]" {
-  // TODO
-  ebs_block_device{}
 }

@@ -24,22 +24,20 @@ import (
 // Spec struct contains the assertions described in .tfspec file
 type Spec struct {
 	Asserts          []*Assert
-	Refutes          []*Assert
+	Rejects          []*TypeName
 	Mocks            []*Mock
 	DataSourceReader *MockDataSourceReader
 }
 
 // Assert struct contains the definition of an assertion
 type Assert struct {
-	Type  string
-	Name  string
+	TypeName
 	Value cty.Value
 }
 
 // Mock struct contains the definition of mocked data resources
 type Mock struct {
-	Type  string
-	Name  string
+	TypeName
 	Query cty.Value
 	Data  cty.Value
 	Body  []byte
@@ -53,8 +51,26 @@ type Context struct {
 	WorkaroundOnce   sync.Once
 }
 
+type TypeName struct {
+	Type string
+	Name string
+}
+
+func NewAssert(aType, aName string, aValue cty.Value) *Assert {
+	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue}
+}
+
+func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
+	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
+}
+
 // Key return fully qualified name of an Assert
 func (a *Assert) Key() string {
+	return fmt.Sprintf("%s.%s", a.Type, a.Name)
+}
+
+// Key return fully qualified name
+func (a *TypeName) Key() string {
 	return fmt.Sprintf("%s.%s", a.Type, a.Name)
 }
 
@@ -102,13 +118,23 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 				continue
 			}
 
-			change, err := resource.After.Decode(assert.Value.Type())
+			change, err := resource.After.Decode(untransformType(assert.Value.Type()))
 			if err != nil {
 				return nil, fmt.Errorf("Error happened while decoding planned resource %s : %v", assert.Name, err)
 			}
 
 			assertDiags := checkAssert(cty.GetAttrPath(assert.Key()), assert.Value, change)
 			diags = diags.Append(assertDiags)
+		}
+	}
+
+	for _, reject := range s.Rejects {
+		fmt.Println(reject.Key())
+		resource := findResource(reject.Key(), plan.Changes.Resources)
+		if resource != nil {
+			diags = diags.Append(RejectErrorDiags(cty.GetAttrPath(reject.Key()), reject, resource))
+		} else {
+			diags = diags.Append(RejectSuccessDiags(cty.GetAttrPath(reject.Key()), "Resource not created", reject))
 		}
 	}
 
@@ -188,6 +214,10 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		childIndex := 0
 		for it.Next() {
 			key, value := it.Element()
+			if key.Type() == cty.String && key.AsString() == "reject" {
+				diags = diags.Append(checkReject(path.GetAttr(key.AsString()), value, got))
+				continue
+			}
 			if IsNull(value) {
 				continue //skip attributes with no spec
 			}
@@ -209,6 +239,88 @@ func checkAssert(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		return diags
 	}
 
+	return diags
+}
+
+// checkAssertAmong will test assertion among all element in given ElementIterator and only return
+// the diagnostict for the closest match
+func checkAssertAmong(path cty.Path, expected cty.Value, got cty.ElementIterator) tfdiags.Diagnostics {
+	var closestDiags, diags tfdiags.Diagnostics
+	// looping over a set or an array:
+	for got.Next() {
+		_, g := got.Element()
+		diags = checkAssert(path, expected, g)
+		if closestDiags == nil {
+			closestDiags = diags
+		} else {
+			if Compare(closestDiags, diags) > 0 {
+				closestDiags = diags
+			}
+		}
+		if !closestDiags.HasErrors() {
+			break // early break as soon as there's a successDiags
+		}
+	}
+	return closestDiags
+}
+
+func checkReject(path cty.Path, rejected, got cty.Value) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+	if rejected.CanIterateElements() && !rejected.IsNull() {
+		it := rejected.ElementIterator()
+		for it.Next() {
+			key, value := it.Element()
+			if value.IsNull() || IsEmptyCollection(value) {
+				continue
+			}
+			found := findAttribute(key, got)
+			if IsNull(value) {
+				// If value is nil, it means that the rejected property is only defined as an empty block
+				if !IsNull(found) {
+					errorElement := cty.ObjectVal(map[string]cty.Value{key.AsString(): found})
+					diags = diags.Append(RejectErrorDiags(path.GetAttr(key.AsString()), key.AsString(), string(MarshalValue(errorElement))))
+				} else {
+					diags = diags.Append(RejectSuccessDiags(path.GetAttr(key.AsString()), fmt.Sprintf("No attribute matching %v", key.AsString()), value))
+				}
+			} else {
+				if value.Type().IsListType() || value.Type().IsSetType() {
+					diags = diags.Append(checkRejectCollection(path, key, value, found))
+				} else {
+					assertDiags := checkAssert(path.GetAttr(key.AsString()), value, found)
+					if assertDiags.HasErrors() {
+						//this means checkAssert is wrong, so found block doesn't match the reject block : it's a success
+						diags = diags.Append(RejectSuccessDiags(path, fmt.Sprintf("No attribute matching %v definition", key.AsString()), value))
+					} else {
+						//this means checkAssert is correct, so found block matches the reject block : it's an error
+						diags = diags.Append(RejectValueErrorDiags(path, key, value, found))
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// checkRejectCollection will check all rejections of a colllection type
+func checkRejectCollection(path cty.Path, key cty.Value, reject, found cty.Value) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+	if reject.CanIterateElements() {
+		it := reject.ElementIterator()
+		for it.Next() {
+			_, r := it.Element()
+			var assertDiags tfdiags.Diagnostics
+			if found.Type().IsSetType() || found.Type().IsListType() {
+				assertDiags = checkAssertAmong(path, r, found.ElementIterator())
+			}
+			if assertDiags.HasErrors() {
+				//this means checkAssert is wrong, so found block doesn't match the reject block : it's a success
+				diags = diags.Append(RejectSuccessDiags(path, fmt.Sprintf("No attribute matching %v definition", key.AsString()), r))
+			} else {
+				//this means checkAssert is correct, so found block matches the reject block : it's an error
+				diags = diags.Append(RejectValueErrorDiags(path, key, r, found))
+			}
+		}
+	}
 	return diags
 }
 
@@ -261,9 +373,14 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Name   string   `hcl:"name,label"`
 		Config hcl.Body `hcl:",remain"`
 	}
+	type reject struct {
+		Type   string   `hcl:"type,label"`
+		Name   string   `hcl:"name,label"`
+		Config hcl.Body `hcl:",remain"`
+	}
 	type root struct {
 		Asserts []*assert `hcl:"assert,block"`
-		Refutes []*assert `hcl:"refute,block"`
+		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
 	}
@@ -281,19 +398,15 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 
 	for _, assert := range r.Asserts {
-		val, diags := decodeBody(&assert.Config, assert.Type, schemas)
+		val, diags := decodeBody(assert.Config, assert.Type, schemas)
 		if diags.HasErrors() {
 			return nil, diags
 		}
-		parsed.Asserts = append(parsed.Asserts, &Assert{Name: assert.Name, Type: assert.Type, Value: val})
+		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val))
 	}
 
-	for _, assert := range r.Refutes {
-		val, diags := decodeBody(&assert.Config, assert.Type, schemas)
-		if diags.HasErrors() {
-			return nil, diags
-		}
-		parsed.Refutes = append(parsed.Refutes, &Assert{Name: assert.Name, Type: assert.Type, Value: val})
+	for _, assert := range r.Rejects {
+		parsed.Rejects = append(parsed.Rejects, &TypeName{Name: assert.Name, Type: assert.Type})
 	}
 	for _, mock := range r.Mocks {
 		query, mocked, diags := decodeMockBody(mock.Config, mock.Type, schemas)
@@ -304,13 +417,13 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		if r, ok := mock.Config.(*hclsyntax.Body); ok {
 			body = r.Range().SliceBytes(file.Bytes)
 		}
-		parsed.Mocks = append(parsed.Mocks, &Mock{Name: mock.Name, Type: mock.Type, Query: query, Data: mocked, Body: body})
+		parsed.Mocks = append(parsed.Mocks, NewMock(mock.Type, mock.Name, query, mocked, body))
 	}
 
 	return parsed, diags
 }
 
-func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (cty.Value, hcl.Diagnostics) {
+func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (cty.Value, hcl.Diagnostics) {
 	rawType := resourceType(bodyType)
 	provName := strings.Split(rawType, "_")[0]
 	var val cty.Value
@@ -323,10 +436,11 @@ func decodeBody(body *hcl.Body, bodyType string, schemas *terraform.Schemas) (ct
 		}
 	} else {
 		schema := laxSchema(LookupProviderSchema(schemas, provName))
+		schema = transformSchema(schema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
-	val, diags := hcldec.Decode(*body, partialSchema.DecoderSpec(), nil)
+	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), nil)
 	return val, diags
 }
 
@@ -375,6 +489,56 @@ func laxSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
 	}
 	return laxed
 }
+
+// transformSchema upgrades the given schema by adding it support for reject blocks
+func transformSchema(schema *terraform.ProviderSchema) *terraform.ProviderSchema {
+	transformed := &terraform.ProviderSchema{ResourceTypes: make(map[string]*configschema.Block, len(schema.ResourceTypes))}
+	for k, rt := range schema.ResourceTypes {
+		transformed.ResourceTypes[k] = transformBlock(rt) //.NoneRequired()
+	}
+	return transformed
+}
+
+// transformBlock modifies a block definition by adding it support for reject blocks
+func transformBlock(original *configschema.Block) *configschema.Block {
+	transformed := &configschema.Block{}
+	transformed.Attributes = make(map[string]*configschema.Attribute, len(original.Attributes))
+	rejects := &configschema.NestedBlock{MaxItems: 0, MinItems: 0, Nesting: configschema.NestingSingle}
+	rejects.BlockTypes = make(map[string]*configschema.NestedBlock, len(original.BlockTypes))
+	for k, v := range original.Attributes {
+		transformed.Attributes[k] = v
+	}
+
+	transformed.BlockTypes = make(map[string]*configschema.NestedBlock, len(original.BlockTypes)+1)
+	for k, v := range original.BlockTypes {
+		t := transformBlock(&v.Block)
+		transformed.BlockTypes[k] = &configschema.NestedBlock{Block: *t, MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
+		rejects.BlockTypes[k] = &configschema.NestedBlock{Block: *t.NoneRequired(), MaxItems: 0, MinItems: 0, Nesting: v.Nesting}
+	}
+	if len(rejects.BlockTypes) > 0 {
+		transformed.BlockTypes["reject"] = rejects
+	}
+
+	return transformed
+}
+
+// untransformType remove "reject" attributes from type definition
+func untransformType(t cty.Type) cty.Type {
+	if !t.IsObjectType() {
+		return t
+	}
+	if _, ok := t.AttributeTypes()["reject"]; !ok {
+		return t
+	}
+	proto := make(map[string]cty.Type, len(t.AttributeTypes())-1)
+	for k, v := range t.AttributeTypes() {
+		if k != "reject" {
+			proto[k] = untransformType(v)
+		}
+	}
+	return cty.Object(proto)
+}
+
 func toMockSchema(schema *configschema.Block) *configschema.Block {
 	laxed := schema.NoneRequired()
 	mocked := &configschema.Block{

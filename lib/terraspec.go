@@ -142,8 +142,7 @@ func runTestCase(tc *testCase, tsCtx *Context, displayPlan bool, results chan<- 
 	validateDiags, err := spec.Validate(plan)
 	ctxDiags = ctxDiags.Append(validateDiags)
 	if err != nil {
-		// TODO manage this error by returning a report with an error diagnostic
-		log.Fatal(err)
+		ctxDiags = ctxDiags.Append(err)
 	}
 	results <- &testReport{name: tc.name(), report: ctxDiags, plan: planOutput}
 }
