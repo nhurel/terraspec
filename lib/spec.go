@@ -27,6 +27,12 @@ type Spec struct {
 	Rejects          []*TypeName
 	Mocks            []*Mock
 	DataSourceReader *MockDataSourceReader
+	Terraspec        *TerraspecConfig
+}
+
+// Terraspec contains a global element for a spec with common configuration similar to terraform hcl element.
+type TerraspecConfig struct {
+	Workspace string
 }
 
 // Assert struct contains the definition of an assertion
@@ -362,6 +368,9 @@ func ReadSpec(filename string, schemas *terraform.Schemas) (*Spec, tfdiags.Diagn
 
 // ParseSpec parses the spec contained in the []byte parameter and returns the resulting Spec or a Diagnostics if error occured in the process
 func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec, hcl.Diagnostics) {
+	type terraspec struct {
+		Body hcl.Body `hcl:",remain"`
+	}
 	type assert struct {
 		Type      string         `hcl:"type,label"`
 		Name      string         `hcl:"name,label"`
@@ -383,11 +392,15 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
+		Terraspec *terraspec `hcl:"terraspec,block"`
 	}
 
 	var r root
 	parsed := &Spec{}
 	file, diags := hclparse.NewParser().ParseHCL(spec, filename)
+	ctx := &hcl.EvalContext{
+		Variables: make(map[string]cty.Value),
+	}
 
 	if diags.HasErrors() {
 		return nil, diags
@@ -397,8 +410,18 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		return nil, diags
 	}
 
+	if r.Terraspec != nil && r.Terraspec.Body != nil {
+		terraspecConfig, diags := decodeTerraspecConfig(r.Terraspec.Body, ctx)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		parsed.Terraspec = terraspecConfig
+	} else {
+		parsed.Terraspec = &TerraspecConfig{}
+	}
+
 	for _, assert := range r.Asserts {
-		val, diags := decodeBody(assert.Config, assert.Type, schemas)
+		val, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags
 		}
@@ -409,7 +432,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		parsed.Rejects = append(parsed.Rejects, &TypeName{Name: assert.Name, Type: assert.Type})
 	}
 	for _, mock := range r.Mocks {
-		query, mocked, diags := decodeMockBody(mock.Config, mock.Type, schemas)
+		query, mocked, diags := decodeMockBody(mock.Config, mock.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags
 		}
@@ -423,7 +446,33 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	return parsed, diags
 }
 
-func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (cty.Value, hcl.Diagnostics) {
+func decodeTerraspecConfig(body hcl.Body, ctx *hcl.EvalContext) (*TerraspecConfig, hcl.Diagnostics) {
+	spec := hcldec.ObjectSpec{
+		"workspace": &hcldec.AttrSpec{
+			Name:     "workspace",
+			Type:     cty.String,
+			Required: false,
+		},
+	}
+
+	val, diags := hcldec.Decode(body, spec, nil)
+	if diags.HasErrors() {
+		return nil, diags
+	}
+
+	workspaceName := ""
+	if !val.IsNull() {
+		workspace := val.GetAttr("workspace")
+		ctx.Variables["terraspec"] = val
+		workspaceName = workspace.AsString()
+	}
+
+	return &TerraspecConfig{
+		Workspace: workspaceName,
+	}, nil
+}
+
+func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (cty.Value, hcl.Diagnostics) {
 	rawType := resourceType(bodyType)
 	provName := strings.Split(rawType, "_")[0]
 	var val cty.Value
@@ -440,22 +489,22 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (cty
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
-	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), nil)
+	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), ctx)
 	return val, diags
 }
 
-func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, mock cty.Value, diags hcl.Diagnostics) {
+func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (query, mock cty.Value, diags hcl.Diagnostics) {
 	var codedMock hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
 	schema := LookupProviderSchema(schemas, provName)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
 
-	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)
+	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
 	if diags.HasErrors() {
 		return
 	}
 	mockedSchema := toMockSchema(partialSchema)
-	mock, moreDiags := hcldec.Decode(codedMock, mockedSchema.DecoderSpec(), nil)
+	mock, moreDiags := hcldec.Decode(codedMock, mockedSchema.DecoderSpec(), ctx)
 	diags = append(diags, moreDiags...)
 	if diags.HasErrors() {
 		return

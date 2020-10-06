@@ -184,14 +184,22 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 		return nil, nil, ctxDiags
 	}
 
-	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx) // Setting a different folder works to parse configuration but not the modules :/
+	// first we create a context to retrieve schemas for the providers, we need them to parse the spec file
+	tfCtxSchemas, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, "default") 
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
 
 	// Parse specs may return mocked data source result
-	spec, diags := terraspec.ReadSpec(tc.specFile, tfCtx.Schemas())
+	spec, diags := terraspec.ReadSpec(tc.specFile, tfCtxSchemas.Schemas())
+	ctxDiags = ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
+	// this is the actual tf context we use for testing
+	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, spec.Terraspec.Workspace) // Setting a different folder works to parse configuration but not the modules :/
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
