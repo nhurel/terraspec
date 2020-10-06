@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform/addrs"
-	"github.com/stretchr/testify/assert"
 	terraspec "github.com/nhurel/terraspec/lib"
 )
 
@@ -23,7 +22,9 @@ func TestBuildProviderResolverFindsLegacyProviderInHome(t *testing.T) {
 	defer cleanupTerraform()
 
 	cwd, err := os.Getwd()
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 	projectPluginFolder := path.Join(cwd, ".terraform/plugins")
 
 	osArch := runtime.GOOS + "_" + runtime.GOARCH
@@ -38,17 +39,35 @@ func TestBuildProviderResolverFindsLegacyProviderInHome(t *testing.T) {
 	
 
 	providerResolver, err := terraspec.BuildProviderResolver(".")
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 
 	providerMetaCloudfoundry := providerResolver.KnownPlugins[provider]
 	providerMetaAws := providerResolver.KnownPlugins[addrs.Provider{Namespace: "hashicorp", Hostname: "registry.terraform.io", Type: "aws"}]
 
-	assert.NotEqual(t, 0, len(providerResolver.KnownPlugins), "Could not find any provider plugins")
-	assert.Equal(t, cloudfoundryPath, providerMetaCloudfoundry.Path)
-	assert.Equal(t, provider.Type, providerMetaCloudfoundry.Name)
-	assert.Equal(t, providerVersion, string(providerMetaCloudfoundry.Version))
+	if  len(providerResolver.KnownPlugins) == 0 {
+		t.Fatal("Could not find any provider plugins")
+	}
 
-	assert.Equal(t, awsPath, providerMetaAws.Path)
-	assert.Equal(t, "aws", providerMetaAws.Name)
-	assert.Equal(t, "3.8.0", string(providerMetaAws.Version))
+	if providerMetaCloudfoundry.Path != cloudfoundryPath {
+		t.Errorf("Unexpected path for cloudfoundry provider. Expected %s. Got %s.", cloudfoundryPath, providerMetaCloudfoundry.Path)
+	}
+	if providerMetaCloudfoundry.Name != provider.Type {
+		t.Errorf("Unexpected name for cloudfoundry provider. Expected %s. Got %s.", provider.Type, providerMetaCloudfoundry.Name)
+	}
+	if string(providerMetaCloudfoundry.Version) != providerVersion {
+		t.Errorf("Unexpected version for cloudfoundry provider. Expected %s. Got %s.", providerVersion, string(providerMetaCloudfoundry.Version))
+	}
+
+	if providerMetaAws.Path != awsPath {
+		t.Errorf("Unexpected path for aws provider. Expected %s. Got %s.", awsPath, providerMetaAws.Path)
+	}
+	if providerMetaAws.Name != "aws" {
+		t.Errorf("Unexpected name for aws provider. Expected %s. Got %s.", "aws", providerMetaAws.Name)
+	}
+	if string(providerMetaAws.Version) != "3.8.0" {
+		t.Errorf("Unexpected version for aws provider. Expected %s. Got %s.", "3.8.0", string(providerMetaAws.Version))
+	}
+
 }

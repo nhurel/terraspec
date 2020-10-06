@@ -14,7 +14,6 @@ import (
 
 	svchost "github.com/hashicorp/terraform-svchost"
 	"github.com/hashicorp/terraform/addrs"
-	"github.com/likexian/gokit/assert"
 	"github.com/mitchellh/go-homedir"
 )
 
@@ -37,18 +36,25 @@ func getPluginFolder() (string, error) {
 // TerraformInit switches to and initializes the terraform project in the given path.
 // Returns a function to cleanup the terraform folder and switch back to current path.
 func TerraformInit(t *testing.T, projectPath string) func() {
+	t.Logf("Execute terraform init in %s", projectPath)
 	cwd, err := os.Getwd()
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 	os.Chdir(projectPath)
 
 	cmd := exec.Command("terraform", "init")
 	output, err := cmd.CombinedOutput()
 	t.Log(string(output))
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 
 	return func() {
 		err := os.RemoveAll(".terraform")
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
 		os.Chdir(cwd)
 	}
 }
@@ -59,9 +65,15 @@ func TerraformInit(t *testing.T, projectPath string) func() {
 func EnsureEmptyPluginFolder(t *testing.T) (string, func()) {
 	// backup the plugin folder and create an empty one
 	pluginFolder, err := getPluginFolder()
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	t.Logf("Ensure empty plugin folder %s", pluginFolder)
 
 	backupFolder := fmt.Sprintf("%s_bak", pluginFolder)
+	
+	t.Logf("Backup plugin folder to %s", backupFolder)
 	os.Rename(pluginFolder, backupFolder)
 
 	os.MkdirAll(pluginFolder, 0777)
@@ -69,7 +81,9 @@ func EnsureEmptyPluginFolder(t *testing.T) (string, func()) {
 	return pluginFolder, func() {
 		// restore plugin folder
 		err := os.RemoveAll(pluginFolder)
-		assert.Nil(t, err)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
 		os.Rename(backupFolder, pluginFolder)
 	}
 }
@@ -79,8 +93,11 @@ func EnsureEmptyPluginFolder(t *testing.T) (string, func()) {
 // You should first use ensureEmptyPluginFolder to avoid damaging the local plugin folder.
 // Returns the addrs.Provider with hostname, namespace, and name, as well as the version of the provider, and the full path to the file.
 func InstallLegacyProvider(t *testing.T) (addrs.Provider, string, string) {
+	t.Log("Installing legacy cloudfoundry provider")
 	pluginDir, err := getPluginFolder()
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 
 	providerExt := ""
 	if runtime.GOOS == "windows" {
@@ -102,14 +119,22 @@ func InstallLegacyProvider(t *testing.T) (addrs.Provider, string, string) {
 	osArch := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 	providerTargetFolder := path.Join(pluginDir, providerHostName, providerNamespace, providerName, providerVersion, osArch)
 	err = os.MkdirAll(providerTargetFolder, 0777)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 
-	err = downloadFile(zipFileName, providerLink)
-	assert.Nil(t, err)
+	err = downloadFile(t, zipFileName, providerLink)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 	defer os.Remove(zipFileName)
 
 	providerPath, err := unzip(zipFileName, providerFileName, providerTargetFolder)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	t.Logf("Legacy cloudfoundry provider installed to %s", providerPath)
 
 	return addrs.Provider{ 
 		Namespace: providerNamespace,
@@ -120,7 +145,8 @@ func InstallLegacyProvider(t *testing.T) (addrs.Provider, string, string) {
 	filepath.FromSlash(providerPath)
 }
 
-func downloadFile(filepath string, url string) error {
+func downloadFile(t *testing.T, filepath string, url string) error {
+	t.Logf("Downloading %s to %s", url, filepath)
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {

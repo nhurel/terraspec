@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	terraspec "github.com/nhurel/terraspec/lib"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
@@ -19,5 +18,7 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 	
 	result := terraspec.ExecTerraspec("spec", false, "")
 
-	assert.Equal(t, 0, result)
+	if result != 0 {
+		t.Fatalf("Exit code from ExecTerraspec does not indicate success")
+	}
 }

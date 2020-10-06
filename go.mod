@@ -9,14 +9,11 @@ require (
 	github.com/hashicorp/hcl/v2 v2.6.0
 	github.com/hashicorp/terraform v0.13.2
 	github.com/hashicorp/terraform-svchost v0.0.0-20191011084731-65d371908596
-	github.com/likexian/gokit v0.20.15
 	github.com/mitchellh/cli v1.0.0
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/stretchr/testify v1.6.1
 	github.com/zclconf/go-cty v1.5.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
-	k8s.io/client-go v11.0.0+incompatible // indirect
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
