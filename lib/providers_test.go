@@ -42,3 +42,41 @@ func TestBuildProviderResolver(t *testing.T) {
 		t.Errorf("PluginMeta not correct. Got %v. Expected %v.", pluginMeta, expectedMeta)
 	}
 }
+
+
+// TestBuildProviderResolverLegacy test that pre terraform 0.13 providers are recognized correctly.
+func TestBuildProviderResolverLegacy(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Could not get cwd: %v", err)
+	}
+
+	provResolver, err := BuildProviderResolver("testdata12")
+	if err != nil {
+		t.Fatalf("Could not build provider resolver: %v", err)
+	}
+
+	pluginMeta := provResolver.KnownPlugins[addrs.Provider{
+		Hostname: addrs.DefaultRegistryHost,
+		Namespace: "hashicorp", // addrs.LegacyProviderNamespace,
+		Type: "testprovider",
+	}]
+
+	pluginMeta.Path = filepath.ToSlash(pluginMeta.Path)
+
+	providerExe := "terraform-provider-testprovider_v0.1.2"
+	if runtime.GOOS == "windows" {
+		providerExe += ".exe"
+	}
+	expectedMeta := discovery.PluginMeta{
+		Name: "testprovider",
+		Version: "0.1.2",
+		Path: filepath.ToSlash(
+			fmt.Sprintf("%s/testdata12/.terraform/plugins/%s_%s/%s", 
+				cwd, runtime.GOOS, runtime.GOARCH, providerExe)),
+	}
+
+	if pluginMeta != expectedMeta  {
+		t.Errorf("PluginMeta not correct. Got %v. Expected %v.", pluginMeta, expectedMeta)
+	}
+}

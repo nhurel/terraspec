@@ -2,23 +2,46 @@ package integrationtests
 
 import (
 	"testing"
-
-	terraspec "github.com/nhurel/terraspec/lib"
 )
 
+type terraformTest struct {
+	terraformVersion string
+	testProjectPath string
+}
+
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
-	// backup the plugin folder and create an empty one
-	_, restorePluginFolder := EnsureEmptyPluginFolder(t)
-	defer restorePluginFolder()
+	cwd := Getwd(t)
+	rootDir := cwd + "/.."
 
-	_, _, _ = InstallLegacyProvider(t)
+	testCases := []terraformTest {
+		{
+			terraformVersion: "0.13.4",
+			testProjectPath: "test_project",
+		},
+		{
+			terraformVersion: "0.12.29",
+			testProjectPath: "test_project_tf12",
+		},
+	} 
 
-	cleanupTerraform := TerraformInit(t, "test_project")
-	defer cleanupTerraform()
-	
-	result := terraspec.ExecTerraspec("spec", false, "")
+	for _, testCase := range testCases {
+		func() {
+			t.Logf("Testing integration with terraform %s", testCase.terraformVersion)
 
-	if result != 0 {
-		t.Fatalf("Exit code from ExecTerraspec does not indicate success")
+			// backup the plugin folder and create an empty one
+			_, restorePluginFolder := EnsureEmptyPluginFolder(t)
+			defer restorePluginFolder()
+
+			_, _, _ = InstallLegacyProvider(t, testCase.terraformVersion)
+
+			// after this we are in the test_project folder
+			terraformPath, deleteTerraform := GetTerraform(t, testCase.terraformVersion, rootDir)
+			defer deleteTerraform()
+			cleanupTerraform := TerraformInit(t, terraformPath, testCase.testProjectPath)
+			defer cleanupTerraform()
+			
+			terraspecPath := GetTerraspec(t, rootDir)
+			RunTerraspec(t, terraspecPath, ".")
+		}()
 	}
 }

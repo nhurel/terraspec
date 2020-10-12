@@ -2,3 +2,5 @@
 **/.terraform/**
 dist/**
 terraspec.exe
+terraspec
+terraform_v*

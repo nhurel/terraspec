@@ -3,6 +3,7 @@ module github.com/nhurel/terraspec
 go 1.14
 
 require (
+	github.com/facebookgo/symwalk v0.0.0-20150726040526-42004b9f3222
 	github.com/hashicorp/go-hclog v0.9.2
 	github.com/hashicorp/go-plugin v1.3.0
 	github.com/hashicorp/go-version v1.2.0
