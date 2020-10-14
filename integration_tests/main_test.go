@@ -6,23 +6,23 @@ import (
 
 type terraformTest struct {
 	terraformVersion string
-	testProjectPath string
+	testProjectPath  string
 }
 
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 	cwd := Getwd(t)
 	rootDir := cwd + "/.."
 
-	testCases := []terraformTest {
+	testCases := []terraformTest{
 		{
 			terraformVersion: "0.13.4",
-			testProjectPath: "test_project",
+			testProjectPath:  "test_project",
 		},
 		{
 			terraformVersion: "0.12.29",
-			testProjectPath: "test_project_tf12",
+			testProjectPath:  "test_project_tf12",
 		},
-	} 
+	}
 
 	for _, testCase := range testCases {
 		func() {
@@ -38,7 +38,7 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 			terraformPath := GetTerraform(t, testCase.terraformVersion, rootDir)
 			cleanupTerraform := TerraformInit(t, terraformPath, testCase.testProjectPath)
 			defer cleanupTerraform()
-			
+
 			terraspecPath := GetTerraspec(t, rootDir)
 			RunTerraspec(t, terraspecPath, ".")
 		}()

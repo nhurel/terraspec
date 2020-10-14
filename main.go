@@ -45,7 +45,7 @@ func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	exitCode := execTerraspec(*specDir, *displayPlan, *tfVersion)
-	
+
 	os.Exit(exitCode)
 }
 
@@ -192,7 +192,7 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 	}
 
 	// first we create a context to retrieve schemas for the providers, we need them to parse the spec file
-	tfCtxSchemas, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, "default") 
+	tfCtxSchemas, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, "default")
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
@@ -211,7 +211,6 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
-
 
 	//If spec contains mocked data source results, they must be provided to the DataSourceReader
 	if len(spec.Mocks) > 0 {

@@ -31,18 +31,17 @@ func TestBuildProviderResolver(t *testing.T) {
 		providerExe += ".exe"
 	}
 	expectedMeta := discovery.PluginMeta{
-		Name: "testprovider",
+		Name:    "testprovider",
 		Version: "0.1.2",
 		Path: filepath.ToSlash(
-			fmt.Sprintf("%s/testdata/.terraform/plugins/no.registry.com/nocorp/testprovider/0.1.2/%s_%s/%s", 
+			fmt.Sprintf("%s/testdata/.terraform/plugins/no.registry.com/nocorp/testprovider/0.1.2/%s_%s/%s",
 				cwd, runtime.GOOS, runtime.GOARCH, providerExe)),
 	}
 
-	if pluginMeta != expectedMeta  {
+	if pluginMeta != expectedMeta {
 		t.Errorf("PluginMeta not correct. Got %v. Expected %v.", pluginMeta, expectedMeta)
 	}
 }
-
 
 // TestBuildProviderResolverLegacy test that pre terraform 0.13 providers are recognized correctly.
 func TestBuildProviderResolverLegacy(t *testing.T) {
@@ -57,9 +56,9 @@ func TestBuildProviderResolverLegacy(t *testing.T) {
 	}
 
 	pluginMeta := provResolver.KnownPlugins[addrs.Provider{
-		Hostname: addrs.DefaultRegistryHost,
+		Hostname:  addrs.DefaultRegistryHost,
 		Namespace: "hashicorp", // addrs.LegacyProviderNamespace,
-		Type: "testprovider",
+		Type:      "testprovider",
 	}]
 
 	pluginMeta.Path = filepath.ToSlash(pluginMeta.Path)
@@ -69,14 +68,14 @@ func TestBuildProviderResolverLegacy(t *testing.T) {
 		providerExe += ".exe"
 	}
 	expectedMeta := discovery.PluginMeta{
-		Name: "testprovider",
+		Name:    "testprovider",
 		Version: "0.1.2",
 		Path: filepath.ToSlash(
-			fmt.Sprintf("%s/testdata12/.terraform/plugins/%s_%s/%s", 
+			fmt.Sprintf("%s/testdata12/.terraform/plugins/%s_%s/%s",
 				cwd, runtime.GOOS, runtime.GOARCH, providerExe)),
 	}
 
-	if pluginMeta != expectedMeta  {
+	if pluginMeta != expectedMeta {
 		t.Errorf("PluginMeta not correct. Got %v. Expected %v.", pluginMeta, expectedMeta)
 	}
 }

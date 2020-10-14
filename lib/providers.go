@@ -108,7 +108,7 @@ func parseProviderValues(provMeta discovery.PluginMeta) (*addrs.Provider, error)
 	if partCount < 6 {
 		return nil, fmt.Errorf("No valid provider path for tf13: %s", provMeta.Path)
 	}
-	
+
 	// this is for terraform 0.13 onwards
 	return &addrs.Provider{
 		Hostname:  svchost.Hostname(parts[partCount-6]),

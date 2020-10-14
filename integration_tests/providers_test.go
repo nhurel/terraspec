@@ -14,15 +14,15 @@ import (
 func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 	cwd := Getwd(t)
 	rootDir := cwd + "/.."
-	
-	testCases := []terraformTest {
+
+	testCases := []terraformTest{
 		{
 			terraformVersion: "0.13.4",
-			testProjectPath: "test_project",
+			testProjectPath:  "test_project",
 		},
 		{
 			terraformVersion: "0.12.29",
-			testProjectPath: "test_project_tf12",
+			testProjectPath:  "test_project_tf12",
 		},
 	}
 
@@ -54,7 +54,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			osArch := runtime.GOOS + "_" + runtime.GOARCH
 			providerFileName := filepath.Base(providerPath)
 			cloudfoundryPath := filepath.FromSlash(path.Join(projectPluginFolder, string(provider.Hostname), provider.Namespace, provider.Type, providerVersion, osArch, providerFileName))
-			
+
 			awsFileName := "terraform-provider-aws_v3.8.0_x5"
 			if runtime.GOOS == "windows" {
 				awsFileName = awsFileName + ".exe"
@@ -66,12 +66,11 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 				provider.Hostname = addrs.DefaultRegistryHost
 				provider.Namespace = "hashicorp" // addrs.LegacyProviderNamespace
 				cloudfoundryPath = filepath.FromSlash(path.Join(pluginFolder, osArch, providerFileName))
-				
+
 				awsHostname = addrs.DefaultRegistryHost
 				awsNamespace = "hashicorp" // addrs.LegacyProviderNamespace
 				awsPath = filepath.FromSlash(path.Join(projectPluginFolder, osArch, awsFileName))
 			}
-			
 
 			providerResolver, err := terraspec.BuildProviderResolver(".")
 			if err != nil {
@@ -81,7 +80,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			providerMetaCloudfoundry := providerResolver.KnownPlugins[provider]
 			providerMetaAws := providerResolver.KnownPlugins[addrs.Provider{Namespace: awsNamespace, Hostname: awsHostname, Type: "aws"}]
 
-			if  len(providerResolver.KnownPlugins) == 0 {
+			if len(providerResolver.KnownPlugins) == 0 {
 				t.Fatal("Could not find any provider plugins")
 			}
 
