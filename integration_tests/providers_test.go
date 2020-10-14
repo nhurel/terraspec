@@ -44,8 +44,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 
 			provider, providerVersion, providerPath := InstallLegacyProvider(t, testCase.terraformVersion)
 
-			terraformPath, deleteTerraform := GetTerraform(t, testCase.terraformVersion, rootDir)
-			defer deleteTerraform()
+			terraformPath := GetTerraform(t, testCase.terraformVersion, rootDir)
 			cleanupTerraform := TerraformInit(t, terraformPath, testCase.testProjectPath)
 			defer cleanupTerraform()
 

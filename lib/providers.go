@@ -96,13 +96,12 @@ func parseProviderValues(provMeta discovery.PluginMeta) (*addrs.Provider, error)
 
 	if parts[partCount-3] == "plugins" {
 		// plugins folder was initialized by terraform <=0.12
-		return &addrs.Provider{
-			Hostname:  addrs.DefaultRegistryHost,
-			//Namespace: addrs.LegacyProviderNamespace,
-			// Fake this, because terraform 13 will look for this namespace by default
-			Namespace: "hashicorp",
-			Type:      provMeta.Name,
-		}, nil
+
+		// HACK: A default provider contains the default registry host and hashicorp namespace
+		// because we are using terraform 12 semantics without required spec in the terraform block
+		// this is exactly what terraform 13 searches for
+		provider := addrs.NewDefaultProvider(provMeta.Name)
+		return &provider, nil
 	}
 
 	// for tf13 the path has to have a much longer length

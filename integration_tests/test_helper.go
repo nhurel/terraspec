@@ -69,7 +69,7 @@ func RunTerraspec(t *testing.T, terraspecPath string, projectPath string) {
 
 
 // GetTerraform downloads terraform with the stated version into the root project directory.
-func GetTerraform(t *testing.T, version string, rootDir string) (string, func()) {
+func GetTerraform(t *testing.T, version string, rootDir string) (string) {
 	terraformZIPFileName := "terraform"
 	terraformFileName := "terraform_v" + version
 	if runtime.GOOS == "windows" {
@@ -80,7 +80,7 @@ func GetTerraform(t *testing.T, version string, rootDir string) (string, func())
 	terraformPath := rootDir + "/" + terraformFileName
 	_, err := os.Stat(terraformPath)
 	if err == nil {
-		return terraformPath, func() {}
+		return terraformPath
 	}
 
 	zipFilePath := "terraform.zip"
@@ -93,7 +93,7 @@ func GetTerraform(t *testing.T, version string, rootDir string) (string, func())
 		t.Fatalf("Could not unzip terraform download: %v", err)
 	}
 
-	return terraformPath, func() {}
+	return terraformPath
 }
 
 // TerraformInit switches to and initializes the terraform project in the given path.

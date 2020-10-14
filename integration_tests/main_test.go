@@ -35,8 +35,7 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 			_, _, _ = InstallLegacyProvider(t, testCase.terraformVersion)
 
 			// after this we are in the test_project folder
-			terraformPath, deleteTerraform := GetTerraform(t, testCase.terraformVersion, rootDir)
-			defer deleteTerraform()
+			terraformPath := GetTerraform(t, testCase.terraformVersion, rootDir)
 			cleanupTerraform := TerraformInit(t, terraformPath, testCase.testProjectPath)
 			defer cleanupTerraform()
 			
