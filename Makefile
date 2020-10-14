@@ -29,6 +29,9 @@ clean:
 test: fmt
 	go test ./...
 
+integration_test: fmt
+	go test ./... -tags=integrationtests
+
 vet: fmt
 	go vet ./...
 
