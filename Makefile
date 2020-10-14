@@ -30,7 +30,7 @@ test: fmt
 	go test ./...
 
 integration_test: fmt
-	go test ./... -tags=integrationtests
+	docker build -f DockerfileIT . && docker image prune -f
 
 vet: fmt
 	go vet ./...
