@@ -1,3 +1,7 @@
 .vscode
 **/.terraform/**
 dist/**
+terraspec.exe
+terraspec
+terraform_v*
+integration_tests/debug.test

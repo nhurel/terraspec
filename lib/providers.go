@@ -5,16 +5,21 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
+	"github.com/facebookgo/symwalk"
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
+	svchost "github.com/hashicorp/terraform-svchost"
 	"github.com/hashicorp/terraform/addrs"
 	terraformProvider "github.com/hashicorp/terraform/builtin/providers/terraform"
 	"github.com/hashicorp/terraform/plugin"
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/providers"
+	"github.com/mitchellh/go-homedir"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -62,16 +67,97 @@ func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
 	return uc
 }
 
+// GetPluginFolder tries to compute the user plugin folder for the current user.
+// For windows: %APPDATA%/terraform.d/plugins
+// For linux: ~/terraform.d/plugins
+func GetPluginFolder() (string, error) {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return "", err
+	}
+
+	if runtime.GOOS == "windows" {
+		return filepath.FromSlash(fmt.Sprintf("%s/AppData/Roaming/terraform.d/plugins", homeDir)), nil
+	}
+
+	return filepath.FromSlash(fmt.Sprintf("%s/.terraform.d/plugins", homeDir)), nil
+}
+
+// parseProviderValues retrives the values for hostname, namespace and provider name from the path.
+func parseProviderValues(provMeta discovery.PluginMeta) (*addrs.Provider, error) {
+	parts := strings.Split(filepath.ToSlash(provMeta.Path), "/")
+
+	partCount := len(parts)
+
+	// overall the path does not have to be that long for tf12
+	if partCount < 3 {
+		return nil, fmt.Errorf("No valid provider path: %s", provMeta.Path)
+	}
+
+	if parts[partCount-3] == "plugins" {
+		// plugins folder was initialized by terraform <=0.12
+
+		// HACK: A default provider contains the default registry host and hashicorp namespace
+		// because we are using terraform 12 semantics without required spec in the terraform block
+		// this is exactly what terraform 13 searches for
+		provider := addrs.NewDefaultProvider(provMeta.Name)
+		return &provider, nil
+	}
+
+	// for tf13 the path has to have a much longer length
+	if partCount < 6 {
+		return nil, fmt.Errorf("No valid provider path for tf13: %s", provMeta.Path)
+	}
+	
+	// this is for terraform 0.13 onwards
+	return &addrs.Provider{
+		Hostname:  svchost.Hostname(parts[partCount-6]),
+		Namespace: parts[partCount-5],
+		Type:      parts[partCount-4],
+	}, nil
+}
+
 // BuildProviderResolver returns a ProviderResolver able to find all providers
 // provided by plugins
 func BuildProviderResolver(dir string) (*ProviderResolver, error) {
-	var pluginDir = path.Join(dir, fmt.Sprintf(".terraform/plugins/%s_%s", runtime.GOOS, runtime.GOARCH))
 
-	pluginMetaSet := discovery.FindPlugins(plugin.ProviderPluginName, []string{pluginDir})
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
-	for k := range pluginMetaSet {
-		pluginsSchema[addrs.NewDefaultProvider(k.Name)] = k
+	// find plugins in project dir
+	projectPluginDir := path.Join(dir, ".terraform/plugins/")
+	osArch := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
+	// TODO: this check could probably be improved
+	_, err := os.Stat(path.Join(projectPluginDir, osArch))
+	isTf13 := os.IsNotExist(err)
+
+	pluginFolders := make([]string, 0)
+	// terraform init creates symlinks under linux
+	symwalk.Walk(projectPluginDir, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() && info.Name() == osArch {
+			pluginFolders = append(pluginFolders, path)
+		}
+
+		return nil
+	})
+
+	if !isTf13 {
+		// for terraform 12 add the global plugin folder
+		// because tf 12 does not put the locally installed providers into the project folder
+		pluginFolder, err := GetPluginFolder()
+		if err != nil {
+			return nil, err
+		}
+
+		pluginFolders = append(pluginFolders, pluginFolder, path.Join(pluginFolder, osArch))
+	}
+
+	projectPluginMetaSet := discovery.FindPlugins(plugin.ProviderPluginName, pluginFolders)
+	for k := range projectPluginMetaSet {
+		provider, err := parseProviderValues(k)
+		if err != nil {
+			return nil, err
+		}
+		pluginsSchema[*provider] = k
 	}
 	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
 }

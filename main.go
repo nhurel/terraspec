@@ -34,6 +34,21 @@ var (
 	tfVersion   = app.Flag("claim-version", "Simulate terraform version : This flag is a workaround to help upgrading terraspec and terraform independently. This flag won't change terraspec behavior but will make it pass version check").String()
 )
 
+func init() {
+	var versionString = `Terraspec Version : %s
+Terraform Version : %s`
+	app.Version(fmt.Sprintf(versionString, Version, tfversion.SemVer))
+}
+
+func main() {
+
+	kingpin.MustParse(app.Parse(os.Args[1:]))
+
+	exitCode := execTerraspec(*specDir, *displayPlan, *tfVersion)
+	
+	os.Exit(exitCode)
+}
+
 type testCase struct {
 	dir          string
 	variableFile string
@@ -50,20 +65,11 @@ type testReport struct {
 	report tfdiags.Diagnostics
 }
 
-func init() {
-	var versionString = `Terraspec Version : %s
-Terraform Version : %s`
-	app.Version(fmt.Sprintf(versionString, Version, tfversion.SemVer))
-}
-
-func main() {
-
-	kingpin.MustParse(app.Parse(os.Args[1:]))
-
+func execTerraspec(specDir string, displayPlan bool, tfVersion string) int {
 	var newSemVer *goversion.Version
 	var err error
-	if *tfVersion != "" {
-		newSemVer, err = goversion.NewSemver(*tfVersion)
+	if tfVersion != "" {
+		newSemVer, err = goversion.NewSemver(tfVersion)
 		if err != nil {
 			log.Fatalf("Invalid value for claim-version flag : %v", err)
 		}
@@ -73,9 +79,9 @@ func main() {
 
 	log.SetFlags(0)
 
-	testCases := findCases(*specDir)
+	testCases := findCases(specDir)
 	if len(testCases) == 0 {
-		log.Fatalf("No test case found in %s directory\n", *specDir)
+		log.Fatalf("No test case found in %s directory\n", specDir)
 	}
 
 	reports := make(chan *testReport)
@@ -86,7 +92,7 @@ func main() {
 	for _, tc := range testCases {
 		wg.Add(1)
 		go func(tc *testCase) {
-			runTestCase(tc, tsCtx, reports)
+			runTestCase(tc, tsCtx, displayPlan, reports)
 			wg.Done()
 		}(tc)
 	}
@@ -110,7 +116,7 @@ func main() {
 		} else {
 			success++
 		}
-		if *displayPlan {
+		if displayPlan {
 			fmt.Println(r.plan)
 		}
 		printDiags(r.report)
@@ -119,10 +125,11 @@ func main() {
 	if tfversion.SemVer != tsCtx.TerraformVersion {
 		colorstring.Printf("[bold][yellow]Terraform version %s substitued with provided one %s\n", tsCtx.TerraformVersion.String(), tsCtx.UserVersion.String())
 	}
-	os.Exit(exitCode)
+
+	return exitCode
 }
 
-func runTestCase(tc *testCase, tsCtx *terraspec.Context, results chan<- *testReport) {
+func runTestCase(tc *testCase, tsCtx *terraspec.Context, displayPlan bool, results chan<- *testReport) {
 	// Disable terraform verbose logging except if TF_LOG is set
 	logging.SetOutput()
 	var planOutput string
@@ -148,7 +155,7 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, results chan<- *testRep
 	log.SetOutput(os.Stderr)
 	var stdout = &strings.Builder{}
 
-	if *displayPlan {
+	if displayPlan {
 		ui := &cli.BasicUi{
 			Reader:      os.Stdin,
 			Writer:      stdout,
@@ -204,6 +211,7 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
+
 
 	//If spec contains mocked data source results, they must be provided to the DataSourceReader
 	if len(spec.Mocks) > 0 {

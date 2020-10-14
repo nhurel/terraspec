@@ -1,0 +1,18 @@
+mock "aws_vpc" "vpc" {
+  id = "vpc-id"
+  return {
+    arn = "arb"
+  }
+}
+
+mock "cloudfoundry_org" "org" {
+  name = "my-org"
+  return {
+    id = "org-id"
+  }
+}
+
+assert "cloudfoundry_space" "space" {
+  name = "my-space"
+  org = "org-id"
+}

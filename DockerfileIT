@@ -1,0 +1,6 @@
+FROM golang
+
+WORKDIR /terraspec
+COPY . .
+
+ENTRYPOINT ["go", "test", "./integration_tests", "-v"]
