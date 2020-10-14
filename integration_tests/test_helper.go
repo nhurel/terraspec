@@ -66,10 +66,8 @@ func RunTerraspec(t *testing.T, terraspecPath string, projectPath string) {
 	}
 }
 
-
-
 // GetTerraform downloads terraform with the stated version into the root project directory.
-func GetTerraform(t *testing.T, version string, rootDir string) (string) {
+func GetTerraform(t *testing.T, version string, rootDir string) string {
 	terraformZIPFileName := "terraform"
 	terraformFileName := "terraform_v" + version
 	if runtime.GOOS == "windows" {
@@ -91,6 +89,11 @@ func GetTerraform(t *testing.T, version string, rootDir string) (string) {
 	terraformPath, err = unzip(zipFilePath, terraformZIPFileName, terraformFileName, rootDir)
 	if err != nil {
 		t.Fatalf("Could not unzip terraform download: %v", err)
+	}
+	// make the provider executable
+	err = os.Chmod(terraformPath, 0777)
+	if err != nil {
+		t.Fatalf("Could not change permissions to 0777 on terraform binary %s", terraformPath)
 	}
 
 	return terraformPath
@@ -211,7 +214,7 @@ func InstallLegacyProvider(t *testing.T, terraformVersion string) (addrs.Provide
 		t.Fatalf("%v", err)
 	}
 	// make the provider executable
-	err = os.Chmod(providerPath, 0777) 
+	err = os.Chmod(providerPath, 0777)
 	if err != nil {
 		t.Fatalf("Could not change permissions to 0777 on legacy provider %s", providerPath)
 	}
