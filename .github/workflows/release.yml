@@ -13,7 +13,7 @@ jobs:
             - name: Check out repository
               uses: actions/checkout@v2
             - name: Run tests
-              run: make test
+              run: make test integration_test
             - name: Build artifacts
               run: make distrib
             - name: Create release
