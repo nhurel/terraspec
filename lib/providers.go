@@ -38,12 +38,12 @@ func (m *MockDataSourceReader) SetMock(mocks []*Mock) {
 }
 
 // ReadDataSource returns a mock response for the datasource call
-func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
-	var mockedResult cty.Value = config
+func (m *MockDataSourceReader) ReadDataSource(config cty.Value) (mockedResult cty.Value) {
+	mockedResult = config
 	for _, mock := range m.mockDataSources {
 		if mock.Query.RawEquals(config) {
 			mockedResult = mock.Call()
-			return mockedResult
+			return
 		}
 	}
 
@@ -51,7 +51,7 @@ func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
 	m.unmatchedCalls = append(m.unmatchedCalls, config)
 	m.mux.Unlock()
 
-	return mockedResult
+	return
 }
 
 // UnmatchedCalls returns the list of all data source calls that were not mocked
@@ -73,6 +73,32 @@ type ExceptedResourceReader struct {
 // SetExpect populates expect data
 func (m *ExceptedResourceReader) SetExpect(expectations []*Expect) {
 	m.expectedResources = expectations
+}
+
+// ReadResource returns a mock response for the resource call
+func (m *ExceptedResourceReader) ReadResource(config cty.Value, plannedState cty.Value) (expectededResult cty.Value) {
+	expectededResult = plannedState
+	for _, expect := range m.expectedResources {
+		if expect.Query.RawEquals(config) {
+			expectededResult = expect.Call()
+			return
+		}
+	}
+
+	m.mux.Lock()
+	m.unmatchedCalls = append(m.unmatchedCalls, plannedState)
+	m.mux.Unlock()
+
+	return
+}
+
+// UnmatchedCalls returns the list of all resource calls that were not mocked
+func (m *ExceptedResourceReader) UnmatchedCalls() []cty.Value {
+	m.mux.RLock()
+	uc := make([]cty.Value, len(m.unmatchedCalls))
+	copy(uc, m.unmatchedCalls)
+	m.mux.RUnlock()
+	return uc
 }
 
 // BuildProviderResolver returns a ProviderResolver able to find all providers
@@ -268,15 +294,7 @@ func (m *ProviderInterface) PlanResourceChange(req providers.PlanResourceChangeR
 		s.Diagnostics = s.Diagnostics.Append(err)
 	} else {
 		s = p.PlanResourceChange(req)
-		var config cty.Value = req.Config
-		// Look for an expectation that fits to the config of this resource
-		// and update expected attributes
-		for _, expect := range m.resourceProvider.expectedResources {
-			if expect.Query.RawEquals(config) {
-				s.PlannedState = expect.Call()
-				break
-			}
-		}
+		s.PlannedState = m.resourceProvider.ReadResource(req.Config, s.PlannedState)
 	}
 	return s
 }
@@ -377,7 +395,6 @@ func (w *WrappedProviderInterface) Stop() error {
 
 // ReadDataSource returns the data source's current state.
 func (w *WrappedProviderInterface) ReadResource(req providers.ReadResourceRequest) providers.ReadResourceResponse {
-	//result := w.resourceProvider.ReadResource(req)
 	return providers.ReadResourceResponse{NewState: req.PriorState}
 }
 

@@ -206,7 +206,7 @@ func (s *Spec) ValidateExcepts() (diags tfdiags.Diagnostics) {
 		if !expect.Called() {
 			if allMissedCalls == "" {
 				var sb strings.Builder
-				for _, call := range s.DataSourceReader.UnmatchedCalls() {
+				for _, call := range s.ResourceReader.UnmatchedCalls() {
 					sb.Write(MarshalValue(call))
 					sb.WriteString("\n")
 				}
