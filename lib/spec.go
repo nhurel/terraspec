@@ -384,16 +384,16 @@ func checkRejectCollection(path cty.Path, key cty.Value, reject, found cty.Value
 
 func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
-	if !got.CanIterateElements() {
-		diags = diags.Append(ErrorDiags(path, "Cannot parse planned output"))
-		return diags
+	if got.CanIterateElements() {
+		//diags = diags.Append(ErrorDiags(path, "Cannot parse planned output"))
+		//return diags
+		it := got.ElementIterator()
+		if !it.Next() {
+			diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
+			return diags
+		}
+		_, got = it.Element()
 	}
-	it := got.ElementIterator()
-	if !it.Next() {
-		diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
-		return diags
-	}
-	_, value := it.Element()
 
 	exp := findAttribute(cty.StringVal("value"), expected)
 	if exp.IsNull() {
@@ -401,7 +401,7 @@ func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		diags = diags.Append(ErrorDiags(path, "Bad Assertion : Assertion on outputs should have a value parameter"))
 		return diags
 	}
-	return checkAssert(path, exp, value)
+	return checkAssert(path, exp, got)
 
 }
 
