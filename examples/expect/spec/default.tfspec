@@ -34,6 +34,6 @@ assert "aws_iam_user_policy" "backup_policy" {
 EOF
 }
 
-# assert "output" "bucket_id" {
-#     value = "arn:aws:s3::testbucket"
-# }
+assert "output" "bucket_id" {
+    value = "arn:aws:s3::testbucket"
+}
