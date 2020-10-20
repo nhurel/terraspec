@@ -66,38 +66,41 @@ func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
 // ExceptResourceReader can expect a state of a Resource and return appropriate mocked data
 type ExceptedResourceReader struct {
 	expectedResources []*Expect
-	unmatchedCalls    []cty.Value // we don't need it maybe
+	unmatchedCalls    []cty.Value
 	mux               sync.RWMutex
 }
 
 // SetExpect populates expect data
-func (m *ExceptedResourceReader) SetExpect(expectations []*Expect) {
-	m.expectedResources = expectations
+func (e *ExceptedResourceReader) SetExpect(expectations []*Expect) {
+	e.expectedResources = expectations
 }
 
 // ReadResource returns a mock response for the resource call
-func (m *ExceptedResourceReader) ReadResource(config cty.Value, plannedState cty.Value) (expectededResult cty.Value) {
+func (e *ExceptedResourceReader) ReadResource(typeName string, config cty.Value, plannedState cty.Value) (expectededResult cty.Value) {
 	expectededResult = plannedState
-	for _, expect := range m.expectedResources {
-		if expect.Query.RawEquals(config) {
+	for _, expect := range e.expectedResources {
+		if expect.Match(typeName, config) {
 			expectededResult = expect.Call()
 			return
 		}
 	}
 
-	m.mux.Lock()
-	m.unmatchedCalls = append(m.unmatchedCalls, plannedState)
-	m.mux.Unlock()
+	o := make(map[string]cty.Value)
+	o[typeName] = plannedState
+
+	e.mux.Lock()
+	e.unmatchedCalls = append(e.unmatchedCalls, cty.ObjectVal(o))
+	e.mux.Unlock()
 
 	return
 }
 
 // UnmatchedCalls returns the list of all resource calls that were not mocked
-func (m *ExceptedResourceReader) UnmatchedCalls() []cty.Value {
-	m.mux.RLock()
-	uc := make([]cty.Value, len(m.unmatchedCalls))
-	copy(uc, m.unmatchedCalls)
-	m.mux.RUnlock()
+func (e *ExceptedResourceReader) UnmatchedCalls() []cty.Value {
+	e.mux.RLock()
+	uc := make([]cty.Value, len(e.unmatchedCalls))
+	copy(uc, e.unmatchedCalls)
+	e.mux.RUnlock()
 	return uc
 }
 
@@ -294,7 +297,7 @@ func (m *ProviderInterface) PlanResourceChange(req providers.PlanResourceChangeR
 		s.Diagnostics = s.Diagnostics.Append(err)
 	} else {
 		s = p.PlanResourceChange(req)
-		s.PlannedState = m.resourceProvider.ReadResource(req.Config, s.PlannedState)
+		s.PlannedState = m.resourceProvider.ReadResource(req.TypeName, req.Config, s.PlannedState)
 	}
 	return s
 }

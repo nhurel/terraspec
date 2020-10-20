@@ -111,14 +111,19 @@ func (e *Expect) Key() string {
 }
 
 // Call marks the mock as called and returns its data
-func (m *Expect) Call() cty.Value {
-	m.calls++
-	return m.Data
+func (e *Expect) Call() cty.Value {
+	e.calls++
+	return e.Data
 }
 
 // Called indicates if mock was called at least once
-func (m *Expect) Called() bool {
-	return m.calls > 0
+func (e *Expect) Called() bool {
+	return e.calls > 0
+}
+
+// Called indicates if mock was called at least once
+func (e *Expect) Match(typeName string, config cty.Value) bool {
+	return e.Type == typeName && e.Query.RawEquals(config)
 }
 
 // Validate checks all the assertions of this Spec against the given terraform Plan.
@@ -212,7 +217,7 @@ func (s *Spec) ValidateExcepts() (diags tfdiags.Diagnostics) {
 				}
 				allMissedCalls = sb.String()
 			}
-			diags = diags.Append(ErrorDiags(cty.GetAttrPath(expect.Type).GetAttr(expect.Name), fmt.Sprintf("No resource matched :\n%s\nUncatched resource calls are :\n%s", string(expect.Body), allMissedCalls)))
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(expect.Type).GetAttr(expect.Name), fmt.Sprintf("No resource matched :\n%s %s\nUncatched resource calls are :\n%s", expect.Type, string(expect.Body), allMissedCalls)))
 		} else {
 			diags = diags.Append(SuccessDiags(cty.GetAttrPath(expect.Type).GetAttr(expect.Name), fmt.Sprintf("expect has been called %d time(s)", expect.calls)))
 		}
@@ -596,6 +601,7 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, 
 func decodeExpectBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, expect cty.Value, diags hcl.Diagnostics) {
 	var codedExpect hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
+
 	schema := LookupProviderSchema(schemas, provName)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.ManagedResourceMode, bodyType)
 
