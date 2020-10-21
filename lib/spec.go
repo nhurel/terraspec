@@ -30,7 +30,7 @@ type Spec struct {
 	Terraspec        *TerraspecConfig
 }
 
-// Terraspec contains a global element for a spec with common configuration similar to terraform hcl element.
+// TerraspecConfig is a global element for a spec with common configuration similar to terraform hcl element.
 type TerraspecConfig struct {
 	Workspace string
 }
@@ -58,15 +58,18 @@ type Context struct {
 	WorkaroundOnce   sync.Once
 }
 
+// TypeName struct holds the type and name of an hcl block
 type TypeName struct {
 	Type string
 	Name string
 }
 
+// NewAssert is a convenient method to instanciate a new Assert struct with given parameters
 func NewAssert(aType, aName string, aValue cty.Value, rValue cty.Value) *Assert {
 	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue, Return: rValue}
 }
 
+// NewMock is a convenient method to instanciate a new Mock struct with given parameters
 func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
 	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
 }
