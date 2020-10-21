@@ -8,6 +8,10 @@ assert "ressource_type" "name" {
             inner_prop = "bad_value"
         }
     }
+
+    return {
+        id = 100
+    }
 }
 
 reject "output" "name" {}

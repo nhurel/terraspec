@@ -19,6 +19,7 @@ func readSpecWithSchemas(t *testing.T, tfSpecFile string) *Spec {
 					"ressource_type": {
 						Attributes: map[string]*configschema.Attribute{
 							"property": {Type: cty.String},
+							"id":       {Type: cty.Number},
 						},
 
 						BlockTypes: map[string]*configschema.NestedBlock{
@@ -76,6 +77,7 @@ func TestParsingWithWorkspace(t *testing.T) {
 	expectedAssert := cty.ObjectVal(
 		map[string]cty.Value{
 			"property": cty.StringVal(spec.Terraspec.Workspace),
+			"id":       cty.NullVal(cty.Number),
 			"inner": cty.ObjectVal(
 				map[string]cty.Value{
 					"inner_prop": cty.StringVal(spec.Terraspec.Workspace),
@@ -89,6 +91,9 @@ func TestParsingWithWorkspace(t *testing.T) {
 	)
 	if !spec.Asserts[0].Value.RawEquals(expectedAssert) {
 		t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", spec.Asserts[0].Value.GoString(), expectedAssert.GoString())
+	}
+	if !spec.Asserts[0].Return.IsNull() {
+		t.Errorf("unexpected assert.return value : %s", spec.Asserts[0].Return.GoString())
 	}
 
 	if len(spec.Rejects) != 1 {
@@ -128,9 +133,10 @@ func TestParsingNoWorkspace(t *testing.T) {
 		if assert.Name != "name" {
 			t.Errorf("assert name is wrong. Got %s", assert.Name)
 		}
-		expected := cty.ObjectVal(
+		expectedValue := cty.ObjectVal(
 			map[string]cty.Value{
 				"property": cty.StringVal("value"),
+				"id":       cty.NullVal(cty.Number),
 				"reject": cty.ObjectVal(
 					map[string]cty.Value{
 						"inner": cty.ObjectVal(
@@ -144,9 +150,21 @@ func TestParsingNoWorkspace(t *testing.T) {
 					}),
 			},
 		)
-		if !assert.Value.RawEquals(expected) {
-			t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", assert.Value.GoString(), expected.GoString())
+		if !assert.Value.RawEquals(expectedValue) {
+			t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", assert.Value.GoString(), expectedValue.GoString())
 		}
+
+		expectedReturn := cty.ObjectVal(
+			map[string]cty.Value{
+				"id":       cty.NumberIntVal(100),
+				"property": cty.NullVal(cty.String),
+				"inner":    cty.NullVal(cty.Object(map[string]cty.Type{"inner_prop": cty.String})),
+			},
+		)
+		if !assert.Return.RawEquals(expectedReturn) {
+			t.Errorf("assert.Return not as expected. \nGot %s\nWant %s", assert.Return.GoString(), expectedReturn.GoString())
+		}
+
 	}
 
 	if nb := len(spec.Rejects); nb != 1 {

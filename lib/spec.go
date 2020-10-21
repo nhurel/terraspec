@@ -38,7 +38,8 @@ type TerraspecConfig struct {
 // Assert struct contains the definition of an assertion
 type Assert struct {
 	TypeName
-	Value cty.Value
+	Value  cty.Value
+	Return cty.Value
 }
 
 // Mock struct contains the definition of mocked data resources
@@ -62,8 +63,8 @@ type TypeName struct {
 	Name string
 }
 
-func NewAssert(aType, aName string, aValue cty.Value) *Assert {
-	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue}
+func NewAssert(aType, aName string, aValue cty.Value, rValue cty.Value) *Assert {
+	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue, Return: rValue}
 }
 
 func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
@@ -421,11 +422,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 
 	for _, assert := range r.Asserts {
-		val, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
+		val, returnVal, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags
 		}
-		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val))
+		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val, returnVal))
 	}
 
 	for _, assert := range r.Rejects {
@@ -472,11 +473,11 @@ func decodeTerraspecConfig(body hcl.Body, ctx *hcl.EvalContext) (*TerraspecConfi
 	}, nil
 }
 
-func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (cty.Value, hcl.Diagnostics) {
+func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (val cty.Value, returnVal cty.Value, diags hcl.Diagnostics) {
 	rawType := resourceType(bodyType)
 	provName := strings.Split(rawType, "_")[0]
-	var val cty.Value
 	var partialSchema *configschema.Block
+	var returnSchema *configschema.Block
 	if provName == "output" {
 		partialSchema = &configschema.Block{
 			Attributes: map[string]*configschema.Attribute{
@@ -485,12 +486,26 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx 
 		}
 	} else {
 		schema := laxSchema(LookupProviderSchema(schemas, provName))
+		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
+		returnSchema = toMockSchema(partialSchema)
 		schema = transformSchema(schema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
-	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), ctx)
-	return val, diags
+	val, codedReturn, diags := hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
+	if diags.HasErrors() {
+		return
+	}
+	if returnSchema == nil {
+		return
+	}
+	returnVal, moreDiags := hcldec.Decode(codedReturn, returnSchema.DecoderSpec(), ctx)
+	diags = append(diags, moreDiags...)
+	if diags.HasErrors() {
+		return
+	}
+	returnVal = returnVal.GetAttr("return")
+	return
 }
 
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (query, mock cty.Value, diags hcl.Diagnostics) {
