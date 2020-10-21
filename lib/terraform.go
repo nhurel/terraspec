@@ -14,9 +14,9 @@ import (
 	goversion "github.com/hashicorp/go-version"
 )
 
-// NewContext creates a new terraform.Context able to compute configs in the context of terraspec
-// It returns the built Context or a Diagnostics if error occured
-func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context, workspace string) (*terraform.Context, tfdiags.Diagnostics) {
+// BuildContextOptions creates a new terraform.ContextOpts ready for instanciating a terraform Context
+// It returns the built ContextOpts or a Diagnostics if error occured
+func BuildContextOptions(dir, varFile string, resolver *ProviderResolver, tsCtx *Context) (*terraform.ContextOpts, tfdiags.Diagnostics) {
 	absDir, err := filepath.Abs(dir)
 	diags := make(tfdiags.Diagnostics, 0)
 	if err != nil {
@@ -65,11 +65,23 @@ func NewContext(dir, varFile string, resolver *ProviderResolver, tsCtx *Context,
 		Provisioners: ProvisionersFactory(),
 		Variables:    variables,
 		Meta: &terraform.ContextMeta{
-			Env: workspace,
+			Env: "",
 		},
 	}
+	return opts, diags
+}
 
-	return terraform.NewContext(opts)
+// LoadSchemas load all the schema required to parse hcl configs
+func LoadSchemas(opts *terraform.ContextOpts) (schemas *terraform.Schemas, diags tfdiags.Diagnostics) {
+	factory := &basicComponentFactory{
+		providers:    opts.Providers,
+		provisioners: opts.Provisioners,
+	}
+	schemas, err := terraform.LoadSchemas(opts.Config, opts.State, factory)
+	if err != nil {
+		diags.Append(err)
+	}
+	return
 }
 
 func workaroundVersionCheck(cfg *configs.Config, userVersion *goversion.Version) {
