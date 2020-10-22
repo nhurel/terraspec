@@ -507,7 +507,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 
 	for _, expect := range r.Expects {
-		query, expected, diags := decodeExpectBody(expect.Config, expect.Type, schemas)
+		query, expected, diags := decodeExpectBody(expect.Config, expect.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags
 		}
@@ -599,19 +599,19 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, 
 	return
 }
 
-func decodeExpectBody(body hcl.Body, bodyType string, schemas *terraform.Schemas) (query, expect cty.Value, diags hcl.Diagnostics) {
+func decodeExpectBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (query, expect cty.Value, diags hcl.Diagnostics) {
 	var codedExpect hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
 
 	schema := LookupProviderSchema(schemas, provName)
 	partialSchema, _ := schema.SchemaForResourceType(addrs.ManagedResourceMode, bodyType)
 
-	query, codedExpect, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), nil)
+	query, codedExpect, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
 	if diags.HasErrors() {
 		return
 	}
 	expectSchema := toMockSchema(partialSchema)
-	expect, moreDiags := hcldec.Decode(codedExpect, expectSchema.DecoderSpec(), nil)
+	expect, moreDiags := hcldec.Decode(codedExpect, expectSchema.DecoderSpec(), ctx)
 	diags = append(diags, moreDiags...)
 	if diags.HasErrors() {
 		return
