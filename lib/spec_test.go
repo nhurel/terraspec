@@ -14,9 +14,9 @@ import (
 func readSpecWithSchemas(t *testing.T, tfSpecFile string) *Spec {
 	schemas := &terraform.Schemas{
 		Providers: map[addrs.Provider]*terraform.ProviderSchema{
-			addrs.NewDefaultProvider("ressource"): {
+			addrs.NewDefaultProvider("assert"): {
 				ResourceTypes: map[string]*configschema.Block{
-					"ressource_type": {
+					"assert_resource_type": {
 						Attributes: map[string]*configschema.Attribute{
 							"property": {Type: cty.String},
 						},
@@ -34,12 +34,23 @@ func readSpecWithSchemas(t *testing.T, tfSpecFile string) *Spec {
 					},
 				},
 				ResourceTypeSchemaVersions: map[string]uint64{
-					"ressource_type": 0,
+					"resource_type": 0,
 				},
 			},
-			addrs.NewDefaultProvider("data"): {
+			addrs.NewDefaultProvider("mock"): {
 				DataSources: map[string]*configschema.Block{
-					"data_type": {
+					"mock_data_type": {
+						Attributes: map[string]*configschema.Attribute{
+							"query": {Type: cty.Number},
+							"id":    {Type: cty.Number},
+							"name":  {Type: cty.String},
+						},
+					},
+				},
+			},
+			addrs.NewDefaultProvider("expect"): {
+				ResourceTypes: map[string]*configschema.Block{
+					"expect_resource_type": {
 						Attributes: map[string]*configschema.Attribute{
 							"query": {Type: cty.Number},
 							"id":    {Type: cty.Number},
@@ -109,6 +120,17 @@ func TestParsingWithWorkspace(t *testing.T) {
 	if !spec.Mocks[0].Data.RawEquals(expectedMock) {
 		t.Errorf("mock.Data not as expected. \nGot %s\nWant %s", spec.Mocks[0].Data.GoString(), expectedMock.GoString())
 	}
+
+	expectedExpect := cty.ObjectVal(
+		map[string]cty.Value{
+			"id":    cty.NumberIntVal(12345),
+			"name":  cty.StringVal(spec.Terraspec.Workspace),
+			"query": cty.NumberIntVal(0),
+		},
+	)
+	if !spec.Expects[0].Data.RawEquals(expectedExpect) {
+		t.Errorf("expect.Data not as expected. \nGot %s\nWant %s", spec.Expects[0].Data.GoString(), expectedExpect.GoString())
+	}
 }
 
 func TestParsingNoWorkspace(t *testing.T) {
@@ -122,7 +144,7 @@ func TestParsingNoWorkspace(t *testing.T) {
 		t.Errorf("spec should have 1 assert, got %d", nb)
 	} else {
 		assert := spec.Asserts[0]
-		if assert.Type != "ressource_type" {
+		if assert.Type != "assert_resource_type" {
 			t.Errorf("assert type is wrong. Got %s", assert.Type)
 		}
 		if assert.Name != "name" {
@@ -165,11 +187,11 @@ func TestParsingNoWorkspace(t *testing.T) {
 		t.Errorf("Spec should have 1 mock. Got %d", nb)
 	} else {
 		mock := spec.Mocks[0]
-		if mock.Type != "data_type" {
-			t.Errorf("refute type is wrong. Got %s", mock.Type)
+		if mock.Type != "mock_data_type" {
+			t.Errorf("mock type is wrong. Got %s", mock.Type)
 		}
 		if mock.Name != "name" {
-			t.Errorf("refute name is wrong. Got %s", mock.Name)
+			t.Errorf("mock name is wrong. Got %s", mock.Name)
 		}
 		expectedData := cty.ObjectVal(
 			map[string]cty.Value{
@@ -190,6 +212,38 @@ func TestParsingNoWorkspace(t *testing.T) {
 		)
 		if !mock.Query.RawEquals(expectedQuery) {
 			t.Errorf("mock.Query not as expected. \nGot %s\nWant %s", mock.Query.GoString(), expectedQuery.GoString())
+		}
+	}
+
+	if nb := len(spec.Expects); nb != 1 {
+		t.Errorf("Spec should have 1 expect. Got %d", nb)
+	} else {
+		expect := spec.Expects[0]
+		if expect.Type != "expect_resource_type" {
+			t.Errorf("expect type is wrong. Got %s", expect.Type)
+		}
+		if expect.Name != "name" {
+			t.Errorf("expect name is wrong. Got %s", expect.Name)
+		}
+		expectedData := cty.ObjectVal(
+			map[string]cty.Value{
+				"id":    cty.NumberIntVal(12345),
+				"name":  cty.StringVal("expected_data"),
+				"query": cty.NumberIntVal(12345),
+			},
+		)
+		if !expect.Data.RawEquals(expectedData) {
+			t.Errorf("expect.Data not as expected. \nGot %s\nWant %s", expect.Data.GoString(), expectedData.GoString())
+		}
+		expectedQuery := cty.ObjectVal(
+			map[string]cty.Value{
+				"query": cty.NumberIntVal(12345),
+				"id":    cty.NullVal(cty.Number),
+				"name":  cty.NullVal(cty.String),
+			},
+		)
+		if !expect.Query.RawEquals(expectedQuery) {
+			t.Errorf("expect.Query not as expected. \nGot %s\nWant %s", expect.Query.GoString(), expectedQuery.GoString())
 		}
 	}
 }
@@ -613,8 +667,11 @@ region = "us-east-1"
 		"not called": {
 			given: &Spec{
 				Mocks: []*Mock{
-					{TypeName: TypeName{Name: "uncalled",
-						Type: "data_not_called"},
+					{
+						TypeName: TypeName{
+							Name: "uncalled",
+							Type: "data_not_called",
+						},
 						Query: cty.ObjectVal(map[string]cty.Value{
 							"id":     cty.NumberIntVal(123456),
 							"region": cty.StringVal("us-east-1"),
@@ -624,13 +681,16 @@ region = "us-east-1"
 				},
 				DataSourceReader: &MockDataSourceReader{},
 			},
-			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No data resource matched :\n%s\nUncatched data source calls are :\n", notCalledBody)),
+			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No data source matched :\n%s\nUncatched data source calls are :\n", notCalledBody)),
 		},
 		"called": {
 			given: &Spec{
 				Mocks: []*Mock{
-					{TypeName: TypeName{Name: "called",
-						Type: "data_called"},
+					{
+						TypeName: TypeName{
+							Name: "called",
+							Type: "data_called",
+						},
 						Query: cty.ObjectVal(map[string]cty.Value{
 							"id":     cty.NumberIntVal(123456),
 							"region": cty.StringVal("us-east-1"),
@@ -646,6 +706,70 @@ region = "us-east-1"
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := tt.given.ValidateMocks()
+			if tt.expected == nil && len(got) > 0 {
+				t.Fatalf("Unexpected diagnostic return %v", got[0])
+			}
+			if tt.expected != nil {
+				if len(got) != 1 {
+					t.Fatalf("Expected only 1 diagnostic. Got %d", len(got))
+				}
+				testDiagnostic(t, got[0], tt.expected)
+			}
+		})
+	}
+}
+func TestValidateExpects(t *testing.T) {
+	var notCalledBody = `{
+id = 123456
+region = "us-east-1"
+}
+`
+	var tests = map[string]struct {
+		given    *Spec
+		expected tfdiags.Diagnostic
+	}{
+		"not called": {
+			given: &Spec{
+				Expects: []*Expect{
+					{
+						TypeName: TypeName{
+							Name: "uncalled",
+							Type: "data_not_called",
+						},
+						Query: cty.ObjectVal(map[string]cty.Value{
+							"id":     cty.NumberIntVal(123456),
+							"region": cty.StringVal("us-east-1"),
+						}),
+						Body: []byte(notCalledBody),
+					},
+				},
+				ResourceReader: &ExceptedResourceReader{},
+			},
+			expected: ErrorDiags(cty.GetAttrPath("data_not_called").GetAttr("uncalled"), fmt.Sprintf("No resource matched :\ndata_not_called %s\nUncatched resource calls are :\n", notCalledBody)),
+		},
+		"called": {
+			given: &Spec{
+				Expects: []*Expect{
+					{
+						TypeName: TypeName{
+							Name: "called",
+							Type: "data_called",
+						},
+						Query: cty.ObjectVal(map[string]cty.Value{
+							"id":     cty.NumberIntVal(123456),
+							"region": cty.StringVal("us-east-1"),
+						}),
+						calls: 1,
+					},
+				},
+			},
+			expected: SuccessDiags(cty.GetAttrPath("data_called").GetAttr("called"), "expect has been called 1 time(s)"),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.given.ValidateExcepts()
 			if tt.expected == nil && len(got) > 0 {
 				t.Fatalf("Unexpected diagnostic return %v", got[0])
 			}

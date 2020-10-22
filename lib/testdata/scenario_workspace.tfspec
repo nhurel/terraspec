@@ -2,7 +2,7 @@ terraspec {
     workspace = "development"
 }
 
-assert "ressource_type" "name" {
+assert "assert_resource_type" "name" {
     property = terraspec.workspace
     inner {
         inner_prop = terraspec.workspace
@@ -11,7 +11,15 @@ assert "ressource_type" "name" {
 
 reject "output" "name" {}
 
-mock "data_type" "name"{
+mock "mock_data_type" "name"{
+    query = 0
+    return {
+        id = 12345
+        name = terraspec.workspace
+    }
+}
+
+expect "expect_resource_type" "name"{
     query = 0
     return {
         id = 12345

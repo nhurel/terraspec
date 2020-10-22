@@ -1,4 +1,4 @@
-assert "ressource_type" "name" {
+assert "assert_resource_type" "name" {
     property = "value"
     inner {
         inner_prop = "value2"
@@ -12,10 +12,18 @@ assert "ressource_type" "name" {
 
 reject "output" "name" {}
 
-mock "data_type" "name"{
+mock "mock_data_type" "name"{
     query = 12345
     return {
         id = 12345
         name = "fetched_data"
+    }
+}
+
+expect "expect_resource_type" "name"{
+    query = 12345
+    return {
+        id = 12345
+        name = "expected_data"
     }
 }
