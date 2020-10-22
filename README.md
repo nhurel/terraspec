@@ -61,9 +61,10 @@ assert "aws_instance" "my-server" { // resource my-server must exist
 }
 ```
 
-### Mock data resource
+### Mock data source
 
-If your configuration contains `data` resource, you can mock their value by writing a `mock` resource in your spec file. A `mock` resource must have the exact same configuration block as the `data` resource. The data you want to return must be set in a `return` block.
+If your configuration contains data sources, you can mock their value by writing a `mock` block in your spec file.
+A `mock` block must have the exact same configuration block as the `data` block. The data you want to return must be set in a nested `return` block.
 
 Example :
 
@@ -86,6 +87,41 @@ mock "aws_vpcs" "selected" {
   return {
     // All attributes of the returned data are set in the return block
     ids = ["mocked_vpc_id"]
+  }
+}
+```
+
+### Expect attributes of a resource
+
+You can also mock attributes of a resource defined in your configuration by using an `expect` block in your spec file.
+A `expect` block must have the exact same configuration block as the `resource` block. The data you want to return must be set in a nested `return` block.
+
+Example :
+
+Terraform code :
+```
+resource "aws_instance" "web" {
+  ami           = "ami-1234"
+  instance_type = "t3.micro"
+
+  tags = {
+    Name = "HelloWorld"
+  }
+}
+```
+
+The spec file mocking this resource should be :
+```
+expect "aws_instance" "web" {
+  ami           = "ami-1234"
+  instance_type = "t3.micro"
+
+  tags = {
+    Name = "HelloWorld"
+  }
+
+  return {
+    id = "i-0123456"
   }
 }
 ```
