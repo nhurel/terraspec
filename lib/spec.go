@@ -43,8 +43,17 @@ type Assert struct {
 	Value cty.Value
 }
 
-// Mock struct contains the definition of mocked data resources
+// Mock struct contains the definition of mocked data sources
 type Mock struct {
+	TypeName
+	Query cty.Value
+	Data  cty.Value
+	Body  []byte
+	calls int
+}
+
+// Expect struct contains the definition of mocked resources
+type Expect struct {
 	TypeName
 	Query cty.Value
 	Data  cty.Value
@@ -95,14 +104,6 @@ func (m *Mock) Call() cty.Value {
 // Called indicates if mock was called at least once
 func (m *Mock) Called() bool {
 	return m.calls > 0
-}
-
-type Expect struct {
-	TypeName
-	Query cty.Value
-	Data  cty.Value
-	Body  []byte
-	calls int
 }
 
 // Key return fully qualified name of an Expect
