@@ -196,7 +196,7 @@ func (s *Spec) ValidateMocks() tfdiags.Diagnostics {
 				}
 				allMissedCalls = sb.String()
 			}
-			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data resource matched :\n%s\nUncatched data source calls are :\n%s", string(mock.Body), allMissedCalls)))
+			diags = diags.Append(ErrorDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("No data source matched :\n%s\nUncatched data source calls are :\n%s", string(mock.Body), allMissedCalls)))
 		} else {
 			diags = diags.Append(SuccessDiags(cty.GetAttrPath(mock.Type).GetAttr(mock.Name), fmt.Sprintf("mock has been called %d time(s)", mock.calls)))
 		}
