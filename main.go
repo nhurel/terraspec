@@ -219,6 +219,7 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 	if len(spec.Mocks) > 0 {
 		providerResolver.DataSourceReader.SetMock(spec.Mocks)
 	}
+	providerResolver.ResourceCreator.SetFakes(spec.Asserts)
 	spec.DataSourceReader = providerResolver.DataSourceReader
 
 	// this is the actual tf context we use for testing

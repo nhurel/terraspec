@@ -62,4 +62,11 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
         }
       }
 
+    return {
+      arn = "arn:ec2::100"
+    }
+}
+
+assert "output" "arn" {
+  value = "arn:ec2::100"
 }

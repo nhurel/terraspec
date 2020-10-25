@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform/plugin"
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/providers"
+	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/mitchellh/go-homedir"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -27,6 +28,7 @@ import (
 type ProviderResolver struct {
 	KnownPlugins     map[addrs.Provider]discovery.PluginMeta
 	DataSourceReader *MockDataSourceReader
+	ResourceCreator  *FakeResourceCreator
 }
 
 // MockDataSourceReader can mock a call to ReadDataSource and return appropriate mocked data
@@ -65,6 +67,44 @@ func (m *MockDataSourceReader) UnmatchedCalls() []cty.Value {
 	copy(uc, m.unmatchedCalls)
 	m.mux.RUnlock()
 	return uc
+}
+
+// FakeResourceCreator can fake a resource creation by setting all resource attributes as defined in an assertion
+type FakeResourceCreator struct {
+	fakeResources []*Assert
+}
+
+// SetFakes populates fake data
+func (f *FakeResourceCreator) SetFakes(fakes []*Assert) {
+	f.fakeResources = fakes
+}
+
+// GetFake return the attributes to set to the resource terraspec fakes to create
+func (f *FakeResourceCreator) GetFake(typeName string, parameters cty.Value) cty.Value {
+	var closest *Assert
+	var closestDiags, diags tfdiags.Diagnostics
+
+	for _, assert := range f.fakeResources {
+		if assert.TypeName.Type == typeName || strings.HasSuffix(assert.TypeName.Type, fmt.Sprintf(".%s", typeName)) {
+			diags = checkAssert(cty.Path{}, assert.Value, parameters)
+			if closest == nil {
+				closest = assert
+				closestDiags = diags
+			} else {
+				if Compare(closestDiags, diags) > 0 {
+					closestDiags = diags
+					closest = assert
+				}
+			}
+			if !closestDiags.HasErrors() {
+				break // early break as soon as there's a successDiags
+			}
+		}
+	}
+	if closest != nil {
+		return closest.Return
+	}
+	return cty.NilVal
 }
 
 // GetPluginFolder tries to compute the user plugin folder for the current user.
@@ -159,7 +199,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 		}
 		pluginsSchema[*provider] = k
 	}
-	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}}, nil
+	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}, ResourceCreator: &FakeResourceCreator{}}, nil
 }
 
 func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
@@ -187,7 +227,7 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Factory {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
-		result[k] = buildFactory(p, r.DataSourceReader)
+		result[k] = buildFactory(p, r.DataSourceReader, r.ResourceCreator)
 	}
 
 	tfProvider := terraformProvider.NewProvider()
@@ -195,9 +235,9 @@ func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Facto
 	return result
 }
 
-func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader) providers.Factory {
+func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, resourceCreator *FakeResourceCreator) providers.Factory {
 	return func() (providers.Interface, error) {
-		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider}, nil
+		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider, resourceCreator: resourceCreator}, nil
 	}
 }
 
@@ -212,6 +252,7 @@ func buildWrappedFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReade
 type ProviderInterface struct {
 	pluginMeta         discovery.PluginMeta
 	dataSourceProvider *MockDataSourceReader
+	resourceCreator    *FakeResourceCreator
 	_plugin            *plugin.GRPCProvider
 	lock               sync.Mutex
 }
@@ -326,6 +367,10 @@ func (m *ProviderInterface) PlanResourceChange(req providers.PlanResourceChangeR
 		s.Diagnostics = s.Diagnostics.Append(err)
 	} else {
 		s = p.PlanResourceChange(req)
+		fake := m.resourceCreator.GetFake(req.TypeName, req.Config)
+		if !fake.IsNull() {
+			s.PlannedState = Merge(s.PlannedState, fake)
+		}
 	}
 	return s
 }

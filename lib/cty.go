@@ -122,3 +122,27 @@ func marshalValue(value cty.Value, writer *hclwrite.Body) {
 		return true, nil
 	})
 }
+
+//Merge returns a new cty.Value whose attributes are set with values from override if present,
+// or from original
+func Merge(original, override cty.Value) cty.Value {
+	if !original.Type().IsObjectType() {
+		if original.Type().IsPrimitiveType() {
+			if override.IsNull() || !override.IsKnown() {
+				return original
+			}
+			return override
+		}
+		return original
+	}
+	attributes := original.Type().AttributeTypes()
+	merged := make(map[string]cty.Value, len(attributes))
+	for att := range attributes {
+		if !override.Type().HasAttribute(att) || override.GetAttr(att).IsNull() || !override.GetAttr(att).IsKnown() {
+			merged[att] = original.GetAttr(att)
+		} else {
+			merged[att] = Merge(original.GetAttr(att), override.GetAttr(att))
+		}
+	}
+	return cty.ObjectVal(merged)
+}

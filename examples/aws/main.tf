@@ -66,3 +66,7 @@ module "ec2-instance" {
 output "private_ip" {
   value = module.ec2-instance.private_ip
 }
+
+output "arn" {
+  value = module.ec2-instance.arn
+}
