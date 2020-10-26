@@ -336,16 +336,17 @@ func checkRejectCollection(path cty.Path, key cty.Value, reject, found cty.Value
 
 func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
+	var value cty.Value
 	if !got.CanIterateElements() {
-		diags = diags.Append(ErrorDiags(path, "Cannot parse planned output"))
-		return diags
+		value = got
+	} else {
+		it := got.ElementIterator()
+		if !it.Next() {
+			diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
+			return diags
+		}
+		_, value = it.Element()
 	}
-	it := got.ElementIterator()
-	if !it.Next() {
-		diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
-		return diags
-	}
-	_, value := it.Element()
 
 	exp := findAttribute(cty.StringVal("value"), expected)
 	if exp.IsNull() {
@@ -354,7 +355,6 @@ func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		return diags
 	}
 	return checkAssert(path, exp, value)
-
 }
 
 // ReadSpec reads the .tfspec file and returns the resulting Spec or a Diagnostics if error occured in the process
