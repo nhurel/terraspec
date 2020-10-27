@@ -581,18 +581,21 @@ func TestCheckOutput(t *testing.T) {
 	}
 
 	var output = cty.TupleVal([]cty.Value{cty.StringVal("good-result")})
+	var singleOutput = cty.StringVal("good-result")
 
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			result := checkOutput(path, tt.given, output)
-			if nb := len(result); nb != 1 {
-				t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
-				if nb == 0 {
-					return
+	for i, o := range []cty.Value{output, singleOutput} {
+		for name, tt := range tests {
+			t.Run(fmt.Sprintf("%s#%d", name, i), func(t *testing.T) {
+				result := checkOutput(path, tt.given, o)
+				if nb := len(result); nb != 1 {
+					t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
+					if nb == 0 {
+						return
+					}
 				}
-			}
-			testDiagnostic(t, result[0], tt.expected)
-		})
+				testDiagnostic(t, result[0], tt.expected)
+			})
+		}
 	}
 
 }
