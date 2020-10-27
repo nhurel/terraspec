@@ -133,6 +133,12 @@ func Merge(original, override cty.Value) cty.Value {
 			}
 			return override
 		}
+		if original.Type().IsCollectionType() {
+			if !IsEmptyCollection(override) {
+				return override
+			}
+			return original
+		}
 		return original
 	}
 	attributes := original.Type().AttributeTypes()

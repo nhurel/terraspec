@@ -198,3 +198,70 @@ func TestMarshalValue(t *testing.T) {
 		})
 	}
 }
+
+func TestMerge(t *testing.T) {
+	original := cty.ObjectVal(map[string]cty.Value{
+		"root-key1":  cty.StringVal("original-value"),
+		"root-key2":  cty.StringVal("original-value"),
+		"empty-set1": cty.SetValEmpty(cty.String),
+		"empty-set2": cty.SetValEmpty(cty.String),
+		"set1":       cty.SetVal([]cty.Value{cty.StringVal("original-value")}),
+		"set2":       cty.SetVal([]cty.Value{cty.StringVal("original-value")}),
+		"set3":       cty.SetVal([]cty.Value{cty.StringVal("original-value")}),
+		"object1": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("original-value"),
+			"object-key2": cty.StringVal("original-value"),
+		}),
+		"object2": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("original-value"),
+		}),
+		"nil-object": cty.UnknownVal(cty.Object(map[string]cty.Type{
+			"object-key1": cty.String,
+		})),
+	})
+
+	override := cty.ObjectVal(map[string]cty.Value{
+		"root-key1":  cty.StringVal("override-value"),
+		"root-key2":  cty.UnknownVal(cty.String),
+		"empty-set1": cty.SetVal([]cty.Value{cty.StringVal("override-value")}),
+		"empty-set2": cty.UnknownVal(cty.Set(cty.String)),
+		"set1":       cty.SetVal([]cty.Value{cty.StringVal("override-value")}),
+		"set2":       cty.SetValEmpty(cty.String),
+		"set3":       cty.UnknownVal(cty.Set(cty.String)),
+		"object1": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("override-value"),
+			"object-key2": cty.UnknownVal(cty.String),
+		}),
+		"object2": cty.UnknownVal(cty.Object(map[string]cty.Type{
+			"object-key1": cty.String,
+		})),
+		"nil-object": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("override-value"),
+		}),
+	})
+
+	expected := cty.ObjectVal(map[string]cty.Value{
+		"root-key1":  cty.StringVal("override-value"),
+		"root-key2":  cty.StringVal("original-value"),
+		"empty-set1": cty.SetVal([]cty.Value{cty.StringVal("override-value")}),
+		"empty-set2": cty.SetValEmpty(cty.String),
+		"set1":       cty.SetVal([]cty.Value{cty.StringVal("override-value")}),
+		"set2":       cty.SetVal([]cty.Value{cty.StringVal("original-value")}),
+		"set3":       cty.SetVal([]cty.Value{cty.StringVal("original-value")}),
+		"object1": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("override-value"),
+			"object-key2": cty.StringVal("original-value"),
+		}),
+		"object2": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("original-value"),
+		}),
+		"nil-object": cty.ObjectVal(map[string]cty.Value{
+			"object-key1": cty.StringVal("override-value"),
+		}),
+	})
+
+	got := terraspec.Merge(original, override)
+	if !got.RawEquals(expected) {
+		t.Errorf("Merge didn't returned expected value.\n Got %v\n Expected %v", got.GoString(), expected.GoString())
+	}
+}
