@@ -30,7 +30,7 @@ type Spec struct {
 	Terraspec        *TerraspecConfig
 }
 
-// Terraspec contains a global element for a spec with common configuration similar to terraform hcl element.
+// TerraspecConfig is a global element for a spec with common configuration similar to terraform hcl element.
 type TerraspecConfig struct {
 	Workspace string
 }
@@ -38,7 +38,8 @@ type TerraspecConfig struct {
 // Assert struct contains the definition of an assertion
 type Assert struct {
 	TypeName
-	Value cty.Value
+	Value  cty.Value
+	Return cty.Value
 }
 
 // Mock struct contains the definition of mocked data resources
@@ -57,15 +58,18 @@ type Context struct {
 	WorkaroundOnce   sync.Once
 }
 
+// TypeName struct holds the type and name of an hcl block
 type TypeName struct {
 	Type string
 	Name string
 }
 
-func NewAssert(aType, aName string, aValue cty.Value) *Assert {
-	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue}
+// NewAssert is a convenient method to instanciate a new Assert struct with given parameters
+func NewAssert(aType, aName string, aValue cty.Value, rValue cty.Value) *Assert {
+	return &Assert{TypeName: TypeName{Type: aType, Name: aName}, Value: aValue, Return: rValue}
 }
 
+// NewMock is a convenient method to instanciate a new Mock struct with given parameters
 func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
 	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
 }
@@ -332,16 +336,17 @@ func checkRejectCollection(path cty.Path, key cty.Value, reject, found cty.Value
 
 func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
+	var value cty.Value
 	if !got.CanIterateElements() {
-		diags = diags.Append(ErrorDiags(path, "Cannot parse planned output"))
-		return diags
+		value = got
+	} else {
+		it := got.ElementIterator()
+		if !it.Next() {
+			diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
+			return diags
+		}
+		_, value = it.Element()
 	}
-	it := got.ElementIterator()
-	if !it.Next() {
-		diags = diags.Append(ErrorDiags(path, "Planned output is empty"))
-		return diags
-	}
-	_, value := it.Element()
 
 	exp := findAttribute(cty.StringVal("value"), expected)
 	if exp.IsNull() {
@@ -350,7 +355,6 @@ func checkOutput(path cty.Path, expected, got cty.Value) tfdiags.Diagnostics {
 		return diags
 	}
 	return checkAssert(path, exp, value)
-
 }
 
 // ReadSpec reads the .tfspec file and returns the resulting Spec or a Diagnostics if error occured in the process
@@ -389,6 +393,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 	type root struct {
 		Asserts []*assert `hcl:"assert,block"`
+		Expects []*assert `hcl:"expect,block"`
 		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
@@ -420,12 +425,16 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		parsed.Terraspec = &TerraspecConfig{}
 	}
 
-	for _, assert := range r.Asserts {
-		val, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
+	asserts := make([]*assert, 0, len(r.Asserts)+len(r.Expects))
+	asserts = append(asserts, r.Asserts...)
+	asserts = append(asserts, r.Expects...)
+
+	for _, assert := range asserts {
+		val, returnVal, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags
 		}
-		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val))
+		parsed.Asserts = append(parsed.Asserts, NewAssert(assert.Type, assert.Name, val, returnVal))
 	}
 
 	for _, assert := range r.Rejects {
@@ -472,11 +481,11 @@ func decodeTerraspecConfig(body hcl.Body, ctx *hcl.EvalContext) (*TerraspecConfi
 	}, nil
 }
 
-func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (cty.Value, hcl.Diagnostics) {
+func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (val cty.Value, returnVal cty.Value, diags hcl.Diagnostics) {
 	rawType := resourceType(bodyType)
 	provName := strings.Split(rawType, "_")[0]
-	var val cty.Value
 	var partialSchema *configschema.Block
+	var returnSchema *configschema.Block
 	if provName == "output" {
 		partialSchema = &configschema.Block{
 			Attributes: map[string]*configschema.Attribute{
@@ -485,12 +494,26 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx 
 		}
 	} else {
 		schema := laxSchema(LookupProviderSchema(schemas, provName))
+		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
+		returnSchema = toMockSchema(partialSchema)
 		schema = transformSchema(schema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 	}
 
-	val, diags := hcldec.Decode(body, partialSchema.DecoderSpec(), ctx)
-	return val, diags
+	val, codedReturn, diags := hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
+	if diags.HasErrors() {
+		return
+	}
+	if returnSchema == nil {
+		return
+	}
+	returnVal, moreDiags := hcldec.Decode(codedReturn, returnSchema.DecoderSpec(), ctx)
+	diags = append(diags, moreDiags...)
+	if diags.HasErrors() {
+		return
+	}
+	returnVal = returnVal.GetAttr("return")
+	return
 }
 
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (query, mock cty.Value, diags hcl.Diagnostics) {

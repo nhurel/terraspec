@@ -1,0 +1,34 @@
+expect "aws_s3_bucket" "backup_bucket" {
+    bucket = "testbucket"
+    return {
+      id = "arn:aws:s3::testbucket"
+      arn = "arn:aws:s3::testbucket"
+    }
+}
+
+assert "aws_s3_bucket_policy" "backup_bucket_policy" {
+    bucket = "testbucket"
+}
+
+assert "aws_iam_user_policy" "backup_policy" {
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "s3:*"
+      ],
+      "Effect": "Allow",
+      "Resource":[
+        "arn:aws:s3::testbucket/*"
+      ]
+    }
+  ]
+}
+EOF
+}
+
+assert "output" "bucket_id" {
+    value = "arn:aws:s3::testbucket"
+}

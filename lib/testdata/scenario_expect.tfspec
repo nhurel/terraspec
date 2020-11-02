@@ -1,4 +1,4 @@
-assert "ressource_type" "name" {
+expect "ressource_type" "name" {
     property = "value"
     inner {
         inner_prop = "value2"

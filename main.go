@@ -191,32 +191,44 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 		return nil, nil, ctxDiags
 	}
 
-	// first we create a context to retrieve schemas for the providers, we need them to parse the spec file
-	tfCtxSchemas, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, "default")
+	// first we create a contextOpts to retrieve schemas for the providers, we need them to parse the spec file
+	tfCtxOpts, diags := terraspec.BuildContextOptions(dir, tc.variableFile, providerResolver, tsCtx)
 	ctxDiags = ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
+	// then load all the schemas
+	schemas, diags := terraspec.LoadSchemas(tfCtxOpts)
+	ctxDiags.Append(err)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
 
 	// Parse specs may return mocked data source result
-	spec, diags := terraspec.ReadSpec(tc.specFile, tfCtxSchemas.Schemas())
+	spec, diags := terraspec.ReadSpec(tc.specFile, schemas)
 	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}
 
-	// this is the actual tf context we use for testing
-	tfCtx, diags := terraspec.NewContext(dir, tc.variableFile, providerResolver, tsCtx, spec.Terraspec.Workspace) // Setting a different folder works to parse configuration but not the modules :/
-	ctxDiags = ctxDiags.Append(diags)
-	if ctxDiags.HasErrors() {
-		return nil, nil, ctxDiags
-	}
+	// Once the spec is read, we can set the workspace for terraform config
+	tfCtxOpts.Meta.Env = spec.Terraspec.Workspace
 
 	//If spec contains mocked data source results, they must be provided to the DataSourceReader
 	if len(spec.Mocks) > 0 {
 		providerResolver.DataSourceReader.SetMock(spec.Mocks)
 	}
+	providerResolver.ResourceCreator.SetFakes(spec.Asserts)
 	spec.DataSourceReader = providerResolver.DataSourceReader
+
+	// this is the actual tf context we use for testing
+	tfCtx, diags := terraform.NewContext(tfCtxOpts)
+	ctxDiags = ctxDiags.Append(diags)
+	if ctxDiags.HasErrors() {
+		return nil, nil, ctxDiags
+	}
+
 	return tfCtx, spec, ctxDiags
 }
 

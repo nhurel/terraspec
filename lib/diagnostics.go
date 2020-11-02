@@ -36,6 +36,8 @@ func ErrorDiags(path cty.Path, detail string) *TerraspecDiagnostic {
 func RejectErrorDiags(path cty.Path, rejected, got interface{}) *TerraspecDiagnostic {
 	return &TerraspecDiagnostic{tfdiags.AttributeValue(tfdiags.Error, "", fmt.Sprintf("%v matches %v", got, rejected), path)}
 }
+
+//RejectValueErrorDiags returns a diagnostic at Error level toi indicate the user a reject assertion failed
 func RejectValueErrorDiags(path cty.Path, key, rejected, got cty.Value) *TerraspecDiagnostic {
 	errorElement := cty.ObjectVal(map[string]cty.Value{key.AsString(): got})
 	errorReject := cty.ObjectVal(map[string]cty.Value{key.AsString(): rejected})

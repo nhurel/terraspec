@@ -19,7 +19,7 @@ To test a different scenario than the  default input variables, you can provide 
 
 Writing an assertion is as easy as writing your initial terraform configuration. If you want to check the behaivor of this terraform code :
 
-```
+```hcl
 resource "aws_instance" "my-server" {
     ami = var.ami
     ...
@@ -27,26 +27,26 @@ resource "aws_instance" "my-server" {
 ```
 
 You can write the following code in your `tfspec` file : 
-```
+```hcl
 assert "aws_instance" "my-server" {
     ami = "the-ami-value-expected"
 }
 ```
 
 To test the value of an output, you can write :
-```
+```hcl
 assert "output" "output-name" {
     value = "expected-output-value"
 }
 ```
 
 You can also check a resource won't be created with this syntax : 
-```
+```hcl
 reject "aws_instance" "another-server" {}
 ```
 
 Or you can check a resource will be created **without** specific configuration, eg : 
- ```
+ ```hcl
 assert "aws_instance" "my-server" { // resource my-server must exist
 
   reject {
@@ -61,6 +61,25 @@ assert "aws_instance" "my-server" { // resource my-server must exist
 }
 ```
 
+### Expect resource attributes
+
+Writing assertions not only lets your specify test about the expected arguments on resource creation, but it can also let you mock the return attributes. To do so, add a `return` block in the `assert` one and set the attribute values you want to be returned.
+
+Example: 
+
+```hcl
+assert "aws_s3_bucket" "backup_bucket" {
+    bucket = "testbucket"
+    return {
+      id = "arn:aws:s3::testbucket"
+      arn = "arn:aws:s3::testbucket"
+    }
+}
+```
+
+`assert` or `expect` : it's up to you. Terraspec support both keywords to specify the assertions. You can use `assert` for assertion only and `expect` when it also mocks returned attributes or you can stick with one keyword for all use cases.
+
+
 ### Mock data resource
 
 If your configuration contains `data` resource, you can mock their value by writing a `mock` resource in your spec file. A `mock` resource must have the exact same configuration block as the `data` resource. The data you want to return must be set in a `return` block.
@@ -68,7 +87,7 @@ If your configuration contains `data` resource, you can mock their value by writ
 Example :
 
 Terraform code :
-```
+```hcl
 data "aws_vpcs" "selected" {
   tags = {
     service = "secure"
@@ -77,7 +96,7 @@ data "aws_vpcs" "selected" {
 ```
 
 The spec file mocking this data source should be :
-```
+```hcl
 mock "aws_vpcs" "selected" {
   // Config block must be duplicated
   tags = {
@@ -152,10 +171,6 @@ This makes `terraspec` able to validate any configuration, whichever cloud provi
 Terraspec is still at its early stages and doesn't cover all cases yet. Here are the known limitations identified so far.
 
 
-### Workspace support
-
-At the moment the variable `terraform.workspace` is not supported
-
 
 ### Terraform version constraints
 
@@ -171,7 +186,7 @@ Use with care : this flag won't change the version of `terraform` effectively us
 
 To know which vesion of `terraform` is embedded in `terraspec`, run `terraspec --version`.
 
-### Installation
+## Installation
 
 For gophers, running `go get github.com/nhurel/terraspec` should do the trick.
 

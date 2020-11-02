@@ -19,6 +19,7 @@ func readSpecWithSchemas(t *testing.T, tfSpecFile string) *Spec {
 					"ressource_type": {
 						Attributes: map[string]*configschema.Attribute{
 							"property": {Type: cty.String},
+							"id":       {Type: cty.Number},
 						},
 
 						BlockTypes: map[string]*configschema.NestedBlock{
@@ -76,6 +77,7 @@ func TestParsingWithWorkspace(t *testing.T) {
 	expectedAssert := cty.ObjectVal(
 		map[string]cty.Value{
 			"property": cty.StringVal(spec.Terraspec.Workspace),
+			"id":       cty.NullVal(cty.Number),
 			"inner": cty.ObjectVal(
 				map[string]cty.Value{
 					"inner_prop": cty.StringVal(spec.Terraspec.Workspace),
@@ -89,6 +91,9 @@ func TestParsingWithWorkspace(t *testing.T) {
 	)
 	if !spec.Asserts[0].Value.RawEquals(expectedAssert) {
 		t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", spec.Asserts[0].Value.GoString(), expectedAssert.GoString())
+	}
+	if !spec.Asserts[0].Return.IsNull() {
+		t.Errorf("unexpected assert.return value : %s", spec.Asserts[0].Return.GoString())
 	}
 
 	if len(spec.Rejects) != 1 {
@@ -112,86 +117,110 @@ func TestParsingWithWorkspace(t *testing.T) {
 }
 
 func TestParsingNoWorkspace(t *testing.T) {
-	spec := readSpecWithSchemas(t, "testdata/scenario.tfspec")
 
-	if spec.Terraspec.Workspace != "" {
-		t.Errorf("terraspec workspace should be empty")
+	tests := map[string]string{
+		"assert": "testdata/scenario.tfspec",
+		"expect": "testdata/scenario_expect.tfspec",
 	}
 
-	if nb := len(spec.Asserts); nb != 1 {
-		t.Errorf("spec should have 1 assert, got %d", nb)
-	} else {
-		assert := spec.Asserts[0]
-		if assert.Type != "ressource_type" {
-			t.Errorf("assert type is wrong. Got %s", assert.Type)
-		}
-		if assert.Name != "name" {
-			t.Errorf("assert name is wrong. Got %s", assert.Name)
-		}
-		expected := cty.ObjectVal(
-			map[string]cty.Value{
-				"property": cty.StringVal("value"),
-				"reject": cty.ObjectVal(
+	for name, scenario := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := readSpecWithSchemas(t, scenario)
+
+			if spec.Terraspec.Workspace != "" {
+				t.Errorf("terraspec workspace should be empty")
+			}
+
+			if nb := len(spec.Asserts); nb != 1 {
+				t.Errorf("spec should have 1 assert, got %d", nb)
+			} else {
+				assert := spec.Asserts[0]
+				if assert.Type != "ressource_type" {
+					t.Errorf("assert type is wrong. Got %s", assert.Type)
+				}
+				if assert.Name != "name" {
+					t.Errorf("assert name is wrong. Got %s", assert.Name)
+				}
+				expectedValue := cty.ObjectVal(
 					map[string]cty.Value{
+						"property": cty.StringVal("value"),
+						"id":       cty.NullVal(cty.Number),
+						"reject": cty.ObjectVal(
+							map[string]cty.Value{
+								"inner": cty.ObjectVal(
+									map[string]cty.Value{
+										"inner_prop": cty.StringVal("bad_value"),
+									}),
+							}),
 						"inner": cty.ObjectVal(
 							map[string]cty.Value{
-								"inner_prop": cty.StringVal("bad_value"),
+								"inner_prop": cty.StringVal("value2"),
 							}),
-					}),
-				"inner": cty.ObjectVal(
+					},
+				)
+				if !assert.Value.RawEquals(expectedValue) {
+					t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", assert.Value.GoString(), expectedValue.GoString())
+				}
+
+				expectedReturn := cty.ObjectVal(
 					map[string]cty.Value{
-						"inner_prop": cty.StringVal("value2"),
-					}),
-			},
-		)
-		if !assert.Value.RawEquals(expected) {
-			t.Errorf("assert.Value not as expected. \nGot %s\nWant %s", assert.Value.GoString(), expected.GoString())
-		}
+						"id":       cty.NumberIntVal(100),
+						"property": cty.NullVal(cty.String),
+						"inner":    cty.NullVal(cty.Object(map[string]cty.Type{"inner_prop": cty.String})),
+					},
+				)
+				if !assert.Return.RawEquals(expectedReturn) {
+					t.Errorf("assert.Return not as expected. \nGot %s\nWant %s", assert.Return.GoString(), expectedReturn.GoString())
+				}
+
+			}
+
+			if nb := len(spec.Rejects); nb != 1 {
+				t.Errorf("Spec should have 1 refutes. Got %d", nb)
+			} else {
+				reject := spec.Rejects[0]
+				if reject.Type != "output" {
+					t.Errorf("refute type is wrong. Got %s", reject.Type)
+				}
+				if reject.Name != "name" {
+					t.Errorf("refute name is wrong. Got %s", reject.Name)
+				}
+			}
+
+			if nb := len(spec.Mocks); nb != 1 {
+				t.Errorf("Spec should have 1 mock. Got %d", nb)
+			} else {
+				mock := spec.Mocks[0]
+				if mock.Type != "data_type" {
+					t.Errorf("refute type is wrong. Got %s", mock.Type)
+				}
+				if mock.Name != "name" {
+					t.Errorf("refute name is wrong. Got %s", mock.Name)
+				}
+				expectedData := cty.ObjectVal(
+					map[string]cty.Value{
+						"id":    cty.NumberIntVal(12345),
+						"name":  cty.StringVal("fetched_data"),
+						"query": cty.NumberIntVal(12345),
+					},
+				)
+				if !mock.Data.RawEquals(expectedData) {
+					t.Errorf("mock.Data not as expected. \nGot %s\nWant %s", mock.Data.GoString(), expectedData.GoString())
+				}
+				expectedQuery := cty.ObjectVal(
+					map[string]cty.Value{
+						"query": cty.NumberIntVal(12345),
+						"id":    cty.NullVal(cty.Number),
+						"name":  cty.NullVal(cty.String),
+					},
+				)
+				if !mock.Query.RawEquals(expectedQuery) {
+					t.Errorf("mock.Query not as expected. \nGot %s\nWant %s", mock.Query.GoString(), expectedQuery.GoString())
+				}
+			}
+		})
 	}
 
-	if nb := len(spec.Rejects); nb != 1 {
-		t.Errorf("Spec should have 1 refutes. Got %d", nb)
-	} else {
-		reject := spec.Rejects[0]
-		if reject.Type != "output" {
-			t.Errorf("refute type is wrong. Got %s", reject.Type)
-		}
-		if reject.Name != "name" {
-			t.Errorf("refute name is wrong. Got %s", reject.Name)
-		}
-	}
-
-	if nb := len(spec.Mocks); nb != 1 {
-		t.Errorf("Spec should have 1 mock. Got %d", nb)
-	} else {
-		mock := spec.Mocks[0]
-		if mock.Type != "data_type" {
-			t.Errorf("refute type is wrong. Got %s", mock.Type)
-		}
-		if mock.Name != "name" {
-			t.Errorf("refute name is wrong. Got %s", mock.Name)
-		}
-		expectedData := cty.ObjectVal(
-			map[string]cty.Value{
-				"id":    cty.NumberIntVal(12345),
-				"name":  cty.StringVal("fetched_data"),
-				"query": cty.NumberIntVal(12345),
-			},
-		)
-		if !mock.Data.RawEquals(expectedData) {
-			t.Errorf("mock.Data not as expected. \nGot %s\nWant %s", mock.Data.GoString(), expectedData.GoString())
-		}
-		expectedQuery := cty.ObjectVal(
-			map[string]cty.Value{
-				"query": cty.NumberIntVal(12345),
-				"id":    cty.NullVal(cty.Number),
-				"name":  cty.NullVal(cty.String),
-			},
-		)
-		if !mock.Query.RawEquals(expectedQuery) {
-			t.Errorf("mock.Query not as expected. \nGot %s\nWant %s", mock.Query.GoString(), expectedQuery.GoString())
-		}
-	}
 }
 
 func TestResourceType(t *testing.T) {
@@ -563,18 +592,21 @@ func TestCheckOutput(t *testing.T) {
 	}
 
 	var output = cty.TupleVal([]cty.Value{cty.StringVal("good-result")})
+	var singleOutput = cty.StringVal("good-result")
 
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			result := checkOutput(path, tt.given, output)
-			if nb := len(result); nb != 1 {
-				t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
-				if nb == 0 {
-					return
+	for i, o := range []cty.Value{output, singleOutput} {
+		for name, tt := range tests {
+			t.Run(fmt.Sprintf("%s#%d", name, i), func(t *testing.T) {
+				result := checkOutput(path, tt.given, o)
+				if nb := len(result); nb != 1 {
+					t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
+					if nb == 0 {
+						return
+					}
 				}
-			}
-			testDiagnostic(t, result[0], tt.expected)
-		})
+				testDiagnostic(t, result[0], tt.expected)
+			})
+		}
 	}
 
 }
