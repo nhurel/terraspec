@@ -393,6 +393,7 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 	}
 	type root struct {
 		Asserts []*assert `hcl:"assert,block"`
+		Expects []*assert `hcl:"expect,block"`
 		Rejects []*reject `hcl:"reject,block"`
 		Mocks   []*mock   `hcl:"mock,block"`
 		// Modules   []*Module   `hcl:"module,block"`
@@ -424,7 +425,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		parsed.Terraspec = &TerraspecConfig{}
 	}
 
-	for _, assert := range r.Asserts {
+	asserts := make([]*assert, 0, len(r.Asserts)+len(r.Expects))
+	asserts = append(asserts, r.Asserts...)
+	asserts = append(asserts, r.Expects...)
+
+	for _, assert := range asserts {
 		val, returnVal, diags := decodeBody(assert.Config, assert.Type, schemas, ctx)
 		if diags.HasErrors() {
 			return nil, diags

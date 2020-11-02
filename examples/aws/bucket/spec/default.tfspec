@@ -1,4 +1,4 @@
-assert "aws_s3_bucket" "backup_bucket" {
+expect "aws_s3_bucket" "backup_bucket" {
     bucket = "testbucket"
     return {
       id = "arn:aws:s3::testbucket"
