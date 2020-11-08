@@ -1,0 +1,119 @@
+# Assert the configuration of the availability set...
+expect "module.instance.azurerm_availability_set" "instance_av_set[0]" {
+    location                     = "uksouth"
+    managed                      = true
+    name                         = "instance-1-three-test-avset"
+    return {
+      # ... and mock its returned id for further assertion
+        id = "1"
+    }
+}
+
+# Assert the configuration of the managed disk...
+expect "module.instance.azurerm_managed_disk" "instance_managed_disk[0]" {
+    disk_size_gb         = 100
+    location             = "uksouth"
+    name                 = "instance-1-three-test"
+    resource_group_name  = "test"
+    storage_account_type = "Standard_LRS"
+    return {
+      # ... and mock its returned id for further assertion
+        id = "10"
+    }
+}
+
+# Mock the id of the second managed disk
+expect "module.instance.azurerm_managed_disk" "instance_managed_disk[1]" {
+    name                 = "instance-2-three-test"
+    resource_group_name  = "test"
+    return {
+        id = "11"
+    }
+}
+
+# Mock the id of the third managed disk
+expect "module.instance.azurerm_managed_disk" "instance_managed_disk[2]" {
+    name                 = "instance-3-three-test"
+    resource_group_name  = "test"
+    return {
+        id = "12"
+    }
+}
+
+# Checks the first vm instance is created as expected
+assert "module.instance.azurerm_virtual_machine" "instance[0]" {
+        availability_set_id              = "1"  # check the created availability set is assigned to this instance
+        location                         = "uksouth"
+        # checks the result of the default hostname_format 
+        name                             = "instance-1-three-test"
+        resource_group_name              = "test"
+        tags                             = {
+          "Cluster"      = "three-test"
+          "Name"         = "instance-1-uksouth"
+          "cluster-type" = "three"
+        }
+        vm_size                          = "Standard_DS1_v2"
+
+        os_profile {
+            admin_username = "centos"
+            computer_name  = "instance-1-three-test"
+        }
+
+        storage_data_disk {
+          disk_size_gb              = 100
+          managed_disk_id           = "10" # check the first created managed disk is assigned to the first instance
+          name                      = "instance-1-three-test"
+        }
+
+       storage_image_reference {
+          offer     = "CentOS"
+          sku       = "7.6"
+        }
+}
+
+# Checks the second vm instance is created as expected
+assert "module.instance.azurerm_virtual_machine" "instance[1]" {
+        availability_set_id              = "1"  # same availaibility set assigne
+        location                         = "uksouth"
+        # checks the result of the default hostname_format 
+        name                             = "instance-2-three-test"
+        resource_group_name              = "test"
+        tags                             = {
+          "Cluster"      = "three-test"
+          "Name"         = "instance-2-uksouth"
+          "cluster-type" = "three"
+        }
+        os_profile {
+            computer_name  = "instance-2-three-test"
+        }
+        storage_data_disk {
+          disk_size_gb              = 100
+          managed_disk_id           = "11" # the second created managed disk is assigned to the second instance
+          name                      = "instance-2-three-test"
+        }
+}
+
+# Checks the third vm instance is created as expected
+assert "module.instance.azurerm_virtual_machine" "instance[2]" {
+        availability_set_id              = "1" # same availaibility set assigne
+        location                         = "uksouth"
+        # checks the result of the default hostname_format 
+        name                             = "instance-3-three-test"
+        resource_group_name              = "test"
+        tags                             = {
+          "Cluster"      = "three-test"
+          "Name"         = "instance-3-uksouth"
+          "cluster-type" = "three"
+        }
+        os_profile {
+            computer_name  = "instance-3-three-test"
+        }
+        storage_data_disk {
+          disk_size_gb              = 100
+          managed_disk_id           = "12" # the second created managed disk is assigned to the second instance
+          name                      = "instance-3-three-test"
+        }
+}
+
+# No other instance should be created
+reject "module.instance.azurerm_virtual_machine" "instance[3]" {}

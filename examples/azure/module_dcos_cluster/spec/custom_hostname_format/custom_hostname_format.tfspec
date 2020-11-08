@@ -1,0 +1,18 @@
+assert "module.instance.azurerm_availability_set" "instance_av_set[0]" {
+    name                         = "mono-test-instance01-avset"
+}
+
+assert "module.instance.azurerm_managed_disk" "instance_managed_disk[0]" {
+    name                 = "mono-test-instance01"
+}
+
+assert "module.instance.azurerm_virtual_machine" "instance[0]" {
+        name                             = "mono-test-instance01"
+}
+
+assert "module.instance.azurerm_virtual_machine" "instance[1]" {
+        name                             = "mono-test-instance02"
+}
+assert "module.instance.azurerm_virtual_machine" "instance[9]" {
+        name                             = "mono-test-instance10"
+}
