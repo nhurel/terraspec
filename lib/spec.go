@@ -596,6 +596,14 @@ func transformBlock(original *configschema.Block) *configschema.Block {
 
 // untransformType remove "reject" attributes from type definition
 func untransformType(t cty.Type) cty.Type {
+	if t.IsCollectionType() {
+		switch {
+		case t.IsSetType():
+			return cty.Set(untransformType(t.ElementType()))
+		case t.IsListType():
+			return cty.List(untransformType(t.ElementType()))
+		}
+	}
 	if !t.IsObjectType() {
 		return t
 	}
