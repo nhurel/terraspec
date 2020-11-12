@@ -1,0 +1,47 @@
+mock "google_compute_zones" "available" {
+  region  = "eu-west1"
+  return {
+    names = ["eu-west1a", "eu-west1b", "eu-west1c"]
+  }
+}
+
+
+assert "module.vm_compute_instance.google_compute_instance_from_template" "compute_instance[0]" {
+    name                      = "myinstance-001"
+    zone                      = "eu-west1a"
+    network_interface {
+        access_config      = [
+            {
+                nat_ip                 = "10.10.0.20"
+                network_tier           = "dmz"
+                public_ptr_domain_name = null
+            },
+            {
+                nat_ip                 = "10.10.0.21"
+                network_tier           = "dmz"
+                public_ptr_domain_name = null
+            },
+            {
+                nat_ip                 = "10.10.0.22"
+                network_tier           = "dmz"
+                public_ptr_domain_name = null
+            }
+        ]
+        network_ip         = "10.0.0.10"
+    }
+}
+
+assert "module.vm_compute_instance.google_compute_instance_from_template" "compute_instance[1]" {
+    name                      = "myinstance-002"
+    zone                      = "eu-west1b"
+    network_interface {
+        network_ip         = "10.0.0.11"
+    }
+}
+assert "module.vm_compute_instance.google_compute_instance_from_template" "compute_instance[2]" {
+    name                      = "myinstance-003"
+    zone                      = "eu-west1c"
+    network_interface {
+        network_ip         = "10.0.0.12"
+    }
+}
