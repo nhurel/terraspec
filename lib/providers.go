@@ -173,7 +173,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	pluginFolders := make([]string, 0)
 	// terraform init creates symlinks under linux
 	symwalk.Walk(projectPluginDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() && info.Name() == osArch {
+		if info != nil && info.IsDir() && info.Name() == osArch {
 			pluginFolders = append(pluginFolders, path)
 		}
 
