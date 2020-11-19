@@ -200,7 +200,7 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 
 	// then load all the schemas
 	schemas, diags := terraspec.LoadSchemas(tfCtxOpts)
-	ctxDiags.Append(err)
+	ctxDiags = ctxDiags.Append(diags)
 	if ctxDiags.HasErrors() {
 		return nil, nil, ctxDiags
 	}

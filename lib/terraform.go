@@ -79,7 +79,7 @@ func LoadSchemas(opts *terraform.ContextOpts) (schemas *terraform.Schemas, diags
 	}
 	schemas, err := terraform.LoadSchemas(opts.Config, opts.State, factory)
 	if err != nil {
-		diags.Append(err)
+		diags = diags.Append(err)
 	}
 	return
 }
