@@ -52,18 +52,17 @@ func buildTerraspec(t *testing.T, terraspecFileName string) {
 }
 
 // RunTerraspec runs the given terraspec executable in the specified project path.
-func RunTerraspec(t *testing.T, terraspecPath string, projectPath string) {
+func RunTerraspec(t *testing.T, terraspecPath string, projectPath string) (int, string, error) {
 	changeBack := Chdir(t, projectPath)
 	defer changeBack()
 
 	cwd := Getwd(t)
 
 	t.Logf("Running %s in %s", terraspecPath, cwd)
-	output, err := exec.Command(terraspecPath).CombinedOutput()
+	cmd := exec.Command(terraspecPath)
+	output, err := cmd.CombinedOutput()
 	t.Logf("Terraspec output is:\r\n%s", string(output))
-	if err != nil {
-		t.Fatalf("Error while executing terraspec: %v", err)
-	}
+	return cmd.ProcessState.ExitCode(), string(output), err
 }
 
 // GetTerraform downloads terraform with the stated version into the root project directory.
@@ -103,12 +102,12 @@ func GetTerraform(t *testing.T, version string, rootDir string) string {
 // Returns a function to cleanup the terraform folder and switch back to current path.
 func TerraformInit(t *testing.T, terraformPath string, projectPath string) func() {
 	changeBack := Chdir(t, projectPath)
+	defer changeBack()
 
 	cwd := Getwd(t)
 
 	pluginFolder, err := terraspec.GetPluginFolder()
 	if err != nil {
-		changeBack()
 		t.Fatalf("%v", err)
 	}
 	t.Logf("Contents of global plugin folder before tf init (%s)", pluginFolder)
@@ -125,7 +124,6 @@ func TerraformInit(t *testing.T, terraformPath string, projectPath string) func(
 	t.Log(string(output))
 	if err != nil {
 		os.RemoveAll(".terraform")
-		changeBack()
 		t.Fatalf("%v", err)
 	}
 
@@ -141,7 +139,6 @@ func TerraformInit(t *testing.T, terraformPath string, projectPath string) func(
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
-		changeBack()
 	}
 }
 

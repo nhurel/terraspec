@@ -51,7 +51,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			defer cleanupTerraform()
 
 			testFolder := Getwd(t)
-			projectPluginFolder := path.Join(testFolder, ".terraform/plugins")
+			projectPluginFolder := path.Join(testFolder, testCase.testProjectPath, ".terraform/plugins")
 
 			osArch := runtime.GOOS + "_" + runtime.GOARCH
 			providerFileName := filepath.Base(providerPath)
@@ -74,7 +74,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 				awsPath = filepath.FromSlash(path.Join(projectPluginFolder, osArch, awsFileName))
 			}
 
-			providerResolver, err := terraspec.BuildProviderResolver(".")
+			providerResolver, err := terraspec.BuildProviderResolver(testCase.testProjectPath)
 			if err != nil {
 				t.Fatalf("%v", err)
 			}
