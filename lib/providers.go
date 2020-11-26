@@ -44,10 +44,10 @@ func (m *MockDataSourceReader) SetMock(mocks []*Mock) {
 }
 
 // ReadDataSource returns a mock response for the datasource call
-func (m *MockDataSourceReader) ReadDataSource(config cty.Value) cty.Value {
+func (m *MockDataSourceReader) ReadDataSource(typeName string, config cty.Value) cty.Value {
 	var mockedResult cty.Value = config
 	for _, mock := range m.mockDataSources {
-		if mock.Query.RawEquals(config) {
+		if typeName == mock.Type && mock.Query.RawEquals(config) {
 			mockedResult = mock.Call()
 			return mockedResult
 		}
@@ -391,7 +391,7 @@ func (m *ProviderInterface) ImportResourceState(req providers.ImportResourceStat
 
 // ReadDataSource returns the data source's current state.
 func (m *ProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
-	mockedResult := m.dataSourceProvider.ReadDataSource(req.Config)
+	mockedResult := m.dataSourceProvider.ReadDataSource(req.TypeName, req.Config)
 	return providers.ReadDataSourceResponse{State: mockedResult}
 }
 
@@ -493,7 +493,7 @@ func (w *WrappedProviderInterface) ImportResourceState(req providers.ImportResou
 
 // ReadDataSource returns the data source's current state.
 func (w *WrappedProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
-	mockedResult := w.dataSourceProvider.ReadDataSource(req.Config)
+	mockedResult := w.dataSourceProvider.ReadDataSource(req.TypeName, req.Config)
 	return providers.ReadDataSourceResponse{State: mockedResult}
 }
 

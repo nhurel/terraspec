@@ -12,7 +12,34 @@ mock "cloudfoundry_org" "org" {
   }
 }
 
+mock "aws_region" "current" {
+  return {
+    name = "us-east-1"
+  }
+}
+mock "aws_iam_account_alias" "current" {
+  return {
+    id = "account_id"
+  }
+}
+mock "aws_billing_service_account" "main" {
+  return {
+    id = "billing_account_id"
+  }
+}
+
+
 assert "cloudfoundry_space" "space" {
   name = "my-space"
   org = "org-id"
+}
+
+assert "output" "region_name"{
+  value = "us-east-1"
+}
+assert "output" "account_id"{
+  value = "account_id"
+}
+assert "output" "billing_account_id"{
+  value = "billing_account_id"
 }

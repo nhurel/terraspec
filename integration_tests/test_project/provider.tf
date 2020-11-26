@@ -23,6 +23,11 @@ data "aws_vpc" "vpc" {
 }
 
 
+data "aws_region" "current" {}
+data "aws_iam_account_alias" "current" {}
+data "aws_billing_service_account" "main" {}
+
+
 data "cloudfoundry_org" "org" {
   name = "my-org"
 }
@@ -30,4 +35,15 @@ data "cloudfoundry_org" "org" {
 resource "cloudfoundry_space" "space" {
     name = "my-space"
     org = data.cloudfoundry_org.org.id
+}
+
+output "region_name"{
+  value = data.aws_region.current.name
+}
+output "account_id"{
+  value = data.aws_iam_account_alias.current.id
+}
+
+output "billing_account_id"{
+  value = data.aws_billing_service_account.main.id
 }
