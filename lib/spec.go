@@ -109,7 +109,7 @@ func (s *Spec) Validate(plan *plans.Plan) (tfdiags.Diagnostics, error) {
 	for _, assert := range s.Asserts {
 		if assert.Type == "output" {
 			output := findOuput(assert.Key(), plan.Changes.Outputs)
-			path := cty.GetAttrPath("output").GetAttr(assert.Key())
+			path := cty.GetAttrPath(assert.Key())
 			if output == nil {
 				diags = diags.Append(ErrorDiags(path, "Missing value"))
 				continue
