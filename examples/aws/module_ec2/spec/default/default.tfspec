@@ -68,5 +68,5 @@ assert "module.ec2-instance.aws_instance" "this[0]" {
 }
 
 assert "output" "arn" {
-  value = "arn:ec2::100"
+  value = ["arn:ec2::100"]
 }

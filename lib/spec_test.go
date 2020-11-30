@@ -2,6 +2,7 @@ package terraspec
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform/addrs"
@@ -131,8 +132,8 @@ func TestParsingNoWorkspace(t *testing.T) {
 				t.Errorf("terraspec workspace should be empty")
 			}
 
-			if nb := len(spec.Asserts); nb != 1 {
-				t.Errorf("spec should have 1 assert, got %d", nb)
+			if nb := len(spec.Asserts); nb != 3 {
+				t.Errorf("spec should have 3 assert, got %d", nb)
 			} else {
 				assert := spec.Asserts[0]
 				if assert.Type != "ressource_type" {
@@ -171,6 +172,34 @@ func TestParsingNoWorkspace(t *testing.T) {
 				)
 				if !assert.Return.RawEquals(expectedReturn) {
 					t.Errorf("assert.Return not as expected. \nGot %s\nWant %s", assert.Return.GoString(), expectedReturn.GoString())
+				}
+
+				assertOutput := spec.Asserts[1]
+				if assertOutput.Type != "output" {
+					t.Errorf("assert type is not output. Got %s", assertOutput.Type)
+				}
+				if assertOutput.Name != "resource_ids" {
+					t.Errorf("assert output name is wrong. Got %s", assertOutput.Name)
+				}
+				expectedOutputValue := cty.TupleVal([]cty.Value{
+					cty.StringVal("1"), cty.StringVal("2"),
+				})
+				gotOutputValue := assertOutput.Value.GetAttr("value")
+				if !gotOutputValue.RawEquals(expectedOutputValue) {
+					t.Errorf("assert.Output value not as expected. \nGot %s\nWant %s", gotOutputValue.GoString(), expectedOutputValue.GoString())
+				}
+
+				assertOutput = spec.Asserts[2]
+				if assertOutput.Type != "output" {
+					t.Errorf("assert type is not output. Got %s", assertOutput.Type)
+				}
+				if assertOutput.Name != "resource_id" {
+					t.Errorf("assert output name is wrong. Got %s", assertOutput.Name)
+				}
+				expectedOutputValue = cty.StringVal("2")
+				gotOutputValue = assertOutput.Value.GetAttr("value")
+				if !gotOutputValue.RawEquals(expectedOutputValue) {
+					t.Errorf("assert.Output value not as expected. \nGot %s\nWant %s", gotOutputValue.GoString(), expectedOutputValue.GoString())
 				}
 
 			}
@@ -589,24 +618,44 @@ func TestCheckOutput(t *testing.T) {
 			}),
 			expected: ErrorDiags(path, "Bad Assertion : Assertion on outputs should have a value parameter"),
 		},
+		"tuple_goodOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"value": cty.TupleVal([]cty.Value{cty.StringVal("good-result")}),
+			}),
+			expected: SuccessDiags(path.IndexInt(0), "good-result"),
+		},
+		"tuple_wrongOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"value": cty.TupleVal([]cty.Value{cty.StringVal("wrong-result")}),
+			}),
+			expected: AssertErrorDiags(path.IndexInt(0), "wrong-result", "good-result"),
+		},
+		"tuple_badOutput": {
+			given: cty.ObjectVal(map[string]cty.Value{
+				"value": cty.StringVal("not a tuple !"),
+			}),
+			expected: ErrorDiags(path, "Bad Assertion : Comparing different types"),
+		},
 	}
 
 	var output = cty.TupleVal([]cty.Value{cty.StringVal("good-result")})
 	var singleOutput = cty.StringVal("good-result")
 
-	for i, o := range []cty.Value{output, singleOutput} {
-		for name, tt := range tests {
-			t.Run(fmt.Sprintf("%s#%d", name, i), func(t *testing.T) {
-				result := checkOutput(path, tt.given, o)
-				if nb := len(result); nb != 1 {
-					t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
-					if nb == 0 {
-						return
-					}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := singleOutput
+			if strings.HasPrefix(name, "tuple_") {
+				got = output
+			}
+			result := checkOutput(path, tt.given, got)
+			if nb := len(result); nb != 1 {
+				t.Errorf("checkOutput should return only 1 diagsnostic, got %d", nb)
+				if nb == 0 {
+					return
 				}
-				testDiagnostic(t, result[0], tt.expected)
-			})
-		}
+			}
+			testDiagnostic(t, result[0], tt.expected)
+		})
 	}
 
 }

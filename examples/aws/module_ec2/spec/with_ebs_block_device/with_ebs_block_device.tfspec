@@ -61,5 +61,5 @@ reject "module.ec2-instance.aws_instance" "this[1]" {
 }
 
 assert "output" "private_ip" {
-    value = "10.0.0.1"
+    value = ["10.0.0.1"]
 }
