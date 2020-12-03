@@ -161,7 +161,7 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, displayPlan bool, resul
 			Writer:      stdout,
 			ErrorWriter: stdout,
 		}
-		local.RenderPlan(plan, nil, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
+		local.RenderPlan(plan, nil, tfCtx.Schemas(), ui, &colorstring.Colorize{Colors: colorstring.DefaultColors})
 		planOutput = stdout.String()
 	}
 	logging.SetOutput()
