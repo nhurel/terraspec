@@ -23,6 +23,10 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			testProjectPath:  "test_project",
 		},
 		{
+			terraformVersion: "0.14.7",
+			testProjectPath:  "test_project",
+		},
+		{
 			terraformVersion: "0.12.29",
 			testProjectPath:  "test_project_tf12",
 		},

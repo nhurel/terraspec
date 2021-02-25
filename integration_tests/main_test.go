@@ -23,6 +23,10 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 			testProjectPath:  "test_project",
 		},
 		{
+			terraformVersion: "0.14.7",
+			testProjectPath:  "test_project",
+		},
+		{
 			terraformVersion: "0.12.29",
 			testProjectPath:  "test_project_tf12",
 		},
@@ -62,6 +66,10 @@ func TestExecTerraspecFailsProperlyWhenTerraformInitNotRun(t *testing.T) {
 	testCases := []terraformTest{
 		{
 			terraformVersion: "0.13.4",
+			testProjectPath:  "test_project",
+		},
+		{
+			terraformVersion: "0.14.7",
 			testProjectPath:  "test_project",
 		},
 		{
