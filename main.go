@@ -140,7 +140,9 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, displayPlan bool, resul
 	}
 	//Refresh is required to have datasources read
 	_, ctxDiags = tfCtx.Refresh()
-	ctxDiags = ctxDiags.Append(spec.ValidateMocks())
+	if ctxDiags.HasErrors() {
+		ctxDiags = ctxDiags.Append(spec.ValidateMocks())
+	}
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
@@ -148,6 +150,7 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, displayPlan bool, resul
 	// Finally, compute the terraform plan
 	plan, planDiags := tfCtx.Plan()
 	ctxDiags = ctxDiags.Append(planDiags)
+	ctxDiags = ctxDiags.Append(spec.ValidateMocks())
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}

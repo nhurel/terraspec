@@ -1,0 +1,11 @@
+expect "null_resource" "resource" {
+  return {
+    id = "test_id"
+  }
+}
+
+mock "null_data_source" "data" {
+  inputs = {
+    my_test_value = "test_id2"
+  }
+}

@@ -92,3 +92,48 @@ func TestExecTerraspecFailsProperlyWhenTerraformInitNotRun(t *testing.T) {
 		})
 	}
 }
+
+func TestExecTerraspecWithScenarioProject(t *testing.T) {
+	cwd := Getwd(t)
+	rootDir := cwd + "/.."
+
+	testCases := []struct {
+		testProjectPath string
+		shouldFail      bool
+	}{
+		{
+			testProjectPath: "mock_failure",
+			shouldFail:      true,
+		},
+		{
+			testProjectPath: "mock_success",
+			shouldFail:      false,
+		},
+	}
+
+	var terraformVersion = "0.13.4"
+
+	for _, testCase := range testCases {
+		t.Run(testCase.testProjectPath, func(t *testing.T) {
+			t.Logf("Testing integration with terraform %s", terraformVersion)
+
+			// backup the plugin folder and create an empty one
+			_, restorePluginFolder := EnsureEmptyPluginFolder(t)
+			defer restorePluginFolder()
+
+			// after this we are in the test_project folder
+			terraformPath := GetTerraform(t, terraformVersion, rootDir)
+			cleanupTerraform := TerraformInit(t, terraformPath, testCase.testProjectPath)
+			defer cleanupTerraform()
+
+			terraspecPath := GetTerraspec(t, rootDir)
+			exitCode, output, _ := RunTerraspec(t, terraspecPath, testCase.testProjectPath)
+			if exitCode == 0 && testCase.shouldFail {
+				t.Errorf("Terraspec succeeds but an error was expected. Output : \n%s", output)
+			}
+			if exitCode != 0 && !testCase.shouldFail {
+				t.Errorf("Terraspec failed unexpectedly. Output : \n%s", output)
+			}
+		})
+	}
+}
