@@ -171,6 +171,13 @@ func EnsureEmptyPluginFolder(t *testing.T) (string, func()) {
 	}
 }
 
+//EnsureEmptyTerraformFolder deletes the .terraform folder inside config directory
+func EnsureEmptyTerraformFolder(t *testing.T, projectPath string) {
+	changeBack := Chdir(t, projectPath)
+	defer changeBack()
+	os.RemoveAll(".terraform")
+}
+
 // InstallLegacyProvider installs a legacy provider.
 // Currently the installed provider is the one for cloudfoundry.
 // You should first use ensureEmptyPluginFolder to avoid damaging the local plugin folder.

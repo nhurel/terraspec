@@ -21,14 +21,17 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 		{
 			terraformVersion: "0.13.4",
 			testProjectPath:  "test_project",
+			pluginFolder:     ".terraform/plugins",
 		},
 		{
 			terraformVersion: "0.14.7",
 			testProjectPath:  "test_project",
+			pluginFolder:     ".terraform/providers",
 		},
 		{
 			terraformVersion: "0.12.29",
 			testProjectPath:  "test_project_tf12",
+			pluginFolder:     ".terraform/plugins",
 		},
 	}
 
@@ -47,6 +50,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			// backup the plugin folder and create an empty one
 			_, restorePluginFolder := EnsureEmptyPluginFolder(t)
 			defer restorePluginFolder()
+			EnsureEmptyTerraformFolder(t, testCase.testProjectPath)
 
 			provider, providerVersion, providerPath := InstallLegacyProvider(t, testCase.terraformVersion)
 
@@ -55,7 +59,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 			defer cleanupTerraform()
 
 			testFolder := Getwd(t)
-			projectPluginFolder := path.Join(testFolder, testCase.testProjectPath, ".terraform/plugins")
+			projectPluginFolder := path.Join(testFolder, testCase.testProjectPath, testCase.pluginFolder)
 
 			osArch := runtime.GOOS + "_" + runtime.GOARCH
 			providerFileName := filepath.Base(providerPath)

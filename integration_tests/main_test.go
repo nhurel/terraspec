@@ -11,6 +11,7 @@ import (
 type terraformTest struct {
 	terraformVersion string
 	testProjectPath  string
+	pluginFolder     string
 }
 
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
@@ -39,6 +40,7 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 			// backup the plugin folder and create an empty one
 			_, restorePluginFolder := EnsureEmptyPluginFolder(t)
 			defer restorePluginFolder()
+			EnsureEmptyTerraformFolder(t, testCase.testProjectPath)
 
 			_, _, _ = InstallLegacyProvider(t, testCase.terraformVersion)
 
