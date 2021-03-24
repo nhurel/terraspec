@@ -1,6 +1,7 @@
 package terraspec
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 
@@ -108,11 +109,11 @@ func InputValuesFromType(values map[string]cty.Value, sourceType terraform.Value
 }
 
 // LookupProviderSchema searches for the schema matching the given type in the collection of known schemas
-func LookupProviderSchema(schemas *terraform.Schemas, providerType string) *terraform.ProviderSchema {
+func LookupProviderSchema(schemas *terraform.Schemas, providerType string) (*terraform.ProviderSchema, error) {
 	for k, v := range schemas.Providers {
 		if k.Type == providerType {
-			return v
+			return v, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("unknown provider \"%s\"", providerType)
 }

@@ -486,7 +486,13 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx 
 			},
 		}
 	} else {
-		schema := laxSchema(LookupProviderSchema(schemas, provName))
+		provSchema, err := LookupProviderSchema(schemas, provName)
+		if err != nil {
+			diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Cannot find schema", Detail: err.Error()})
+			return
+		}
+
+		schema := laxSchema(provSchema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
 		returnSchema = toMockSchema(partialSchema)
 		schema = transformSchema(schema)
@@ -512,7 +518,11 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx 
 func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx *hcl.EvalContext) (query, mock cty.Value, diags hcl.Diagnostics) {
 	var codedMock hcl.Body
 	provName := strings.Split(bodyType, "_")[0]
-	schema := LookupProviderSchema(schemas, provName)
+	schema, err := LookupProviderSchema(schemas, provName)
+	if err != nil {
+		diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Cannot find schema", Detail: err.Error()})
+		return
+	}
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
 
 	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
@@ -527,7 +537,7 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, 
 	}
 	mock = mock.GetAttr("return")
 
-	mock, err := cty.Transform(mock, func(path cty.Path, value cty.Value) (cty.Value, error) {
+	mock, err = cty.Transform(mock, func(path cty.Path, value cty.Value) (cty.Value, error) {
 		if value.IsNull() {
 			return path.Apply(query)
 		}
