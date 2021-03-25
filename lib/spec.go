@@ -494,6 +494,10 @@ func decodeBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, ctx 
 
 		schema := laxSchema(provSchema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
+		if partialSchema == nil {
+			diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Invalid resource", Subject: body.MissingItemRange().Ptr(), Detail: fmt.Sprintf("resource \"%s\" does not exist", bodyType)})
+			return
+		}
 		returnSchema = toMockSchema(partialSchema)
 		schema = transformSchema(schema)
 		partialSchema, _ = schema.SchemaForResourceType(addrs.ManagedResourceMode, rawType)
@@ -524,6 +528,10 @@ func decodeMockBody(body hcl.Body, bodyType string, schemas *terraform.Schemas, 
 		return
 	}
 	partialSchema, _ := schema.SchemaForResourceType(addrs.DataResourceMode, bodyType)
+	if partialSchema == nil {
+		diags = diags.Append(&hcl.Diagnostic{Severity: hcl.DiagError, Summary: "Invalid resource", Subject: body.MissingItemRange().Ptr(), Detail: fmt.Sprintf("resource \"%s\" does not exist", bodyType)})
+		return
+	}
 
 	query, codedMock, diags = hcldec.PartialDecode(body, partialSchema.DecoderSpec(), ctx)
 	if diags.HasErrors() {
