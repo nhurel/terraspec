@@ -164,11 +164,22 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
 	// find plugins in project dir
-	projectPluginDir := path.Join(dir, ".terraform/plugins/")
+	isTf14 := false
+	isTf13 := false
 	osArch := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
-	// TODO: this check could probably be improved
-	_, err := os.Stat(path.Join(projectPluginDir, osArch))
-	isTf13 := os.IsNotExist(err)
+
+	projectPluginDir := path.Join(dir, ".terraform/providers/")
+	_, err := os.Stat(projectPluginDir)
+	if err == nil {
+		isTf14 = true
+	}
+
+	if !isTf14 {
+		projectPluginDir = path.Join(dir, ".terraform/plugins/")
+		// TODO: this check could probably be improved
+		_, err := os.Stat(path.Join(projectPluginDir, osArch))
+		isTf13 = os.IsNotExist(err)
+	}
 
 	pluginFolders := make([]string, 0)
 	// terraform init creates symlinks under linux
@@ -180,7 +191,7 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 		return nil
 	})
 
-	if !isTf13 {
+	if !isTf13 && !isTf14 {
 		// for terraform 12 add the global plugin folder
 		// because tf 12 does not put the locally installed providers into the project folder
 		pluginFolder, err := GetPluginFolder()

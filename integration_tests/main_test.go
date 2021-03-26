@@ -11,6 +11,7 @@ import (
 type terraformTest struct {
 	terraformVersion string
 	testProjectPath  string
+	pluginFolder     string
 }
 
 func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
@@ -20,6 +21,10 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 	testCases := []terraformTest{
 		{
 			terraformVersion: "0.13.4",
+			testProjectPath:  "test_project",
+		},
+		{
+			terraformVersion: "0.14.7",
 			testProjectPath:  "test_project",
 		},
 		{
@@ -35,6 +40,7 @@ func TestExecTerraspecWithTestProjectSucceeds(t *testing.T) {
 			// backup the plugin folder and create an empty one
 			_, restorePluginFolder := EnsureEmptyPluginFolder(t)
 			defer restorePluginFolder()
+			EnsureEmptyTerraformFolder(t, testCase.testProjectPath)
 
 			_, _, _ = InstallLegacyProvider(t, testCase.terraformVersion)
 
@@ -62,6 +68,10 @@ func TestExecTerraspecFailsProperlyWhenTerraformInitNotRun(t *testing.T) {
 	testCases := []terraformTest{
 		{
 			terraformVersion: "0.13.4",
+			testProjectPath:  "test_project",
+		},
+		{
+			terraformVersion: "0.14.7",
 			testProjectPath:  "test_project",
 		},
 		{
