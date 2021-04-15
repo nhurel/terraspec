@@ -2,8 +2,8 @@ terraspec {
   workspace = "somevalue"
 }
 
-assert "aws_vpc" "test" {
+assert "aws_s3_bucket" "b" {
   tags = {
-    workspace = terraspec.workspace
+    Name = terraspec.workspace
   }
 }

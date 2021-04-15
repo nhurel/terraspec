@@ -1,10 +1,23 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 3.0"
+    }
+  }
+}
+
 provider "aws" {
   region = "eu-west-1"
 }
 
-resource "aws_vpc" "test" {
-  cidr_block  = "192.168.0.0/16"
+
+resource "aws_s3_bucket" "b" {
+  bucket = "my-tf-test-bucket"
+  acl    = "private"
+
   tags = {
-    workspace = terraform.workspace
+    Name        = terraform.workspace
+    Environment = "Dev"
   }
 }
