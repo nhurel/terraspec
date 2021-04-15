@@ -138,16 +138,21 @@ func runTestCase(tc *testCase, tsCtx *terraspec.Context, displayPlan bool, resul
 	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
 		return
 	}
-	//Refresh is required to have datasources read
-	_, ctxDiags = tfCtx.Refresh()
+	// Refresh is required to have datasources read
+	_, refreshDiags := tfCtx.Refresh()
+	ctxDiags = ctxDiags.Append(refreshDiags)
 	if ctxDiags.HasErrors() {
 		ctxDiags = ctxDiags.Append(spec.ValidateMocks())
-	}
-	if fatalReport(tc.name(), ctxDiags, planOutput, results) {
+		fatalReport(tc.name(), ctxDiags, planOutput, results)
 		return
 	}
 
+	// A first apply is required to have a resource state initiated.
+	// Otherwise, data source having properties based on resource attributes won't be called and cannot be mocked
+	tfCtx.Apply()
+
 	// Finally, compute the terraform plan
+	spec.ResetMocks()
 	plan, planDiags := tfCtx.Plan()
 	ctxDiags = ctxDiags.Append(planDiags)
 	ctxDiags = ctxDiags.Append(spec.ValidateMocks())

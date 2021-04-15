@@ -22,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform/tfdiags"
 	"github.com/mitchellh/go-homedir"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/json"
 )
 
 // ProviderResolver is reponsible for finding all provider implementations that can be instanciated
@@ -304,7 +305,6 @@ func (m *ProviderInterface) GetSchema() providers.GetSchemaResponse {
 	} else {
 		s = p.GetSchema()
 	}
-
 	return s
 }
 
@@ -342,7 +342,9 @@ func (m *ProviderInterface) ValidateDataSourceConfig(req providers.ValidateDataS
 func (m *ProviderInterface) UpgradeResourceState(req providers.UpgradeResourceStateRequest) providers.UpgradeResourceStateResponse {
 	// FIXME Hopefully this will never be required
 	// Make sure terraspec is always run from an empty state (may need to override the backend)
-	return providers.UpgradeResourceStateResponse{}
+	t := m.GetSchema().ResourceTypes[req.TypeName].Block.ImpliedType()
+	val, _ := json.Unmarshal(req.RawStateJSON, t)
+	return providers.UpgradeResourceStateResponse{UpgradedState: val}
 }
 
 // Configure configures and initialized the provider.
@@ -366,7 +368,7 @@ func (m *ProviderInterface) Stop() error {
 
 // ReadResource refreshes a resource and returns its current state.
 func (m *ProviderInterface) ReadResource(req providers.ReadResourceRequest) providers.ReadResourceResponse {
-	return providers.ReadResourceResponse{}
+	return providers.ReadResourceResponse{NewState: req.PriorState}
 }
 
 // PlanResourceChange takes the current state and proposed state of a

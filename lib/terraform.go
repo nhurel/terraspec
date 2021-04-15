@@ -68,6 +68,7 @@ func BuildContextOptions(dir, varFile string, resolver *ProviderResolver, tsCtx 
 		Meta: &terraform.ContextMeta{
 			Env: "",
 		},
+		SkipRefresh: false,
 	}
 	return opts, diags
 }

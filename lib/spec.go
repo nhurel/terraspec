@@ -173,6 +173,14 @@ func (s *Spec) ValidateMocks() tfdiags.Diagnostics {
 	return diags
 }
 
+// ResetMocks reset state related to mock calls
+func (s *Spec) ResetMocks() {
+	for _, mock := range s.Mocks {
+		mock.calls = 0
+	}
+	s.DataSourceReader.unmatchedCalls = nil
+}
+
 func findOuput(name string, outputs []*plans.OutputChangeSrc) *plans.OutputChangeSrc {
 	for _, output := range outputs {
 		if name == output.Addr.String() {
