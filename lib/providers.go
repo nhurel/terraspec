@@ -16,6 +16,7 @@ import (
 	svchost "github.com/hashicorp/terraform-svchost"
 	"github.com/hashicorp/terraform/addrs"
 	terraformProvider "github.com/hashicorp/terraform/builtin/providers/terraform"
+	"github.com/hashicorp/terraform/helper/logging"
 	"github.com/hashicorp/terraform/plugin"
 	"github.com/hashicorp/terraform/plugin/discovery"
 	"github.com/hashicorp/terraform/providers"
@@ -215,9 +216,14 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 }
 
 func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
+	logLevel := hclog.Error
+	if os.Getenv(logging.EnvLog) == "TRACE" {
+		logLevel = hclog.Trace
+	}
+
 	logger := hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin",
-		Level:  hclog.Error,
+		Level:  logLevel,
 		Output: os.Stderr,
 	})
 
