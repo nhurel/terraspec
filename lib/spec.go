@@ -53,9 +53,10 @@ type Mock struct {
 
 // Context struct holds terraspec options and internal state
 type Context struct {
-	TerraformVersion *goversion.Version
-	UserVersion      *goversion.Version
-	WorkaroundOnce   sync.Once
+	TerraformVersion  *goversion.Version
+	UserVersion       *goversion.Version
+	ConfigureProvider bool
+	WorkaroundOnce    sync.Once
 }
 
 // TypeName struct holds the type and name of an hcl block

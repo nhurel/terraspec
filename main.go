@@ -29,9 +29,10 @@ var (
 	Version string
 	app     = kingpin.New("terraspec", "Unit test terraform config")
 	// dir = app.Flag("dir", "path to terraform config dir to test").Default(".").String()
-	specDir     = app.Flag("spec", "path to folder containing test cases").Default("spec").String()
-	displayPlan = app.Flag("display-plan", "Print the full plan before the results").Default("false").Bool()
-	tfVersion   = app.Flag("claim-version", "Simulate terraform version : This flag is a workaround to help upgrading terraspec and terraform independently. This flag won't change terraspec behavior but will make it pass version check").String()
+	specDir           = app.Flag("spec", "path to folder containing test cases").Default("spec").String()
+	displayPlan       = app.Flag("display-plan", "Print the full plan before the results").Default("false").Bool()
+	tfVersion         = app.Flag("claim-version", "Simulate terraform version : This flag is a workaround to help upgrading terraspec and terraform independently. This flag won't change terraspec behavior but will make it pass version check").String()
+	configureProvider = app.Flag("configure-provider", "Execute provider plugin configuration. Required for aws > 3.0").Default("false").Bool()
 )
 
 func init() {
@@ -44,7 +45,7 @@ func main() {
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
-	exitCode := execTerraspec(*specDir, *displayPlan, *tfVersion)
+	exitCode := execTerraspec(*specDir, *displayPlan, *tfVersion, *configureProvider)
 
 	os.Exit(exitCode)
 }
@@ -65,7 +66,7 @@ type testReport struct {
 	report tfdiags.Diagnostics
 }
 
-func execTerraspec(specDir string, displayPlan bool, tfVersion string) int {
+func execTerraspec(specDir string, displayPlan bool, tfVersion string, configureProvider bool) int {
 	var newSemVer *goversion.Version
 	var err error
 	if tfVersion != "" {
@@ -75,7 +76,7 @@ func execTerraspec(specDir string, displayPlan bool, tfVersion string) int {
 		}
 	}
 
-	tsCtx := &terraspec.Context{TerraformVersion: tfversion.SemVer, UserVersion: newSemVer}
+	tsCtx := &terraspec.Context{TerraformVersion: tfversion.SemVer, UserVersion: newSemVer, ConfigureProvider: configureProvider}
 
 	log.SetFlags(0)
 
@@ -193,7 +194,7 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 		return nil, nil, ctxDiags
 
 	}
-	providerResolver, err := terraspec.BuildProviderResolver(absDir)
+	providerResolver, err := terraspec.BuildProviderResolver(absDir, tsCtx.ConfigureProvider)
 	if err != nil {
 		ctxDiags = ctxDiags.Append(err)
 		return nil, nil, ctxDiags

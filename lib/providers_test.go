@@ -18,7 +18,7 @@ func TestBuildProviderResolver(t *testing.T) {
 		t.Fatalf("Could not get cwd: %v", err)
 	}
 
-	provResolver, err := BuildProviderResolver("testdata")
+	provResolver, err := BuildProviderResolver("testdata", false)
 	if err != nil {
 		t.Fatalf("Could not build provider resolver: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestBuildProviderResolverLegacy(t *testing.T) {
 		t.Fatalf("Could not get cwd: %v", err)
 	}
 
-	provResolver, err := BuildProviderResolver("testdata12")
+	provResolver, err := BuildProviderResolver("testdata12", false)
 	if err != nil {
 		t.Fatalf("Could not build provider resolver: %v", err)
 	}

@@ -28,9 +28,10 @@ import (
 
 // ProviderResolver is reponsible for finding all provider implementations that can be instanciated
 type ProviderResolver struct {
-	KnownPlugins     map[addrs.Provider]discovery.PluginMeta
-	DataSourceReader *MockDataSourceReader
-	ResourceCreator  *FakeResourceCreator
+	KnownPlugins      map[addrs.Provider]discovery.PluginMeta
+	DataSourceReader  *MockDataSourceReader
+	ResourceCreator   *FakeResourceCreator
+	ConfigureProvider bool
 }
 
 // MockDataSourceReader can mock a call to ReadDataSource and return appropriate mocked data
@@ -161,7 +162,7 @@ func parseProviderValues(provMeta discovery.PluginMeta) (*addrs.Provider, error)
 
 // BuildProviderResolver returns a ProviderResolver able to find all providers
 // provided by plugins
-func BuildProviderResolver(dir string) (*ProviderResolver, error) {
+func BuildProviderResolver(dir string, configureProvider bool) (*ProviderResolver, error) {
 
 	pluginsSchema := make(map[addrs.Provider]discovery.PluginMeta)
 
@@ -212,7 +213,12 @@ func BuildProviderResolver(dir string) (*ProviderResolver, error) {
 		}
 		pluginsSchema[*provider] = k
 	}
-	return &ProviderResolver{KnownPlugins: pluginsSchema, DataSourceReader: &MockDataSourceReader{}, ResourceCreator: &FakeResourceCreator{}}, nil
+	return &ProviderResolver{
+		KnownPlugins:      pluginsSchema,
+		DataSourceReader:  &MockDataSourceReader{},
+		ResourceCreator:   &FakeResourceCreator{},
+		ConfigureProvider: configureProvider,
+	}, nil
 }
 
 func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
@@ -245,7 +251,7 @@ func newClient(pluginName discovery.PluginMeta) *goplugin.Client {
 func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Factory {
 	result := make(map[addrs.Provider]providers.Factory)
 	for k, p := range r.KnownPlugins {
-		result[k] = buildFactory(p, r.DataSourceReader, r.ResourceCreator)
+		result[k] = buildFactory(p, r.DataSourceReader, r.ResourceCreator, !r.ConfigureProvider)
 	}
 
 	tfProvider := terraformProvider.NewProvider()
@@ -253,9 +259,9 @@ func (r *ProviderResolver) ResolveProviders() map[addrs.Provider]providers.Facto
 	return result
 }
 
-func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, resourceCreator *FakeResourceCreator) providers.Factory {
+func buildFactory(p discovery.PluginMeta, dsProvider *MockDataSourceReader, resourceCreator *FakeResourceCreator, skipConfigure bool) providers.Factory {
 	return func() (providers.Interface, error) {
-		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider, resourceCreator: resourceCreator}, nil
+		return &ProviderInterface{pluginMeta: p, dataSourceProvider: dsProvider, resourceCreator: resourceCreator, skipConfigure: skipConfigure}, nil
 	}
 }
 
@@ -273,6 +279,7 @@ type ProviderInterface struct {
 	resourceCreator    *FakeResourceCreator
 	_plugin            *plugin.GRPCProvider
 	lock               sync.Mutex
+	skipConfigure      bool
 }
 
 var _ providers.Interface = (*ProviderInterface)(nil)
@@ -355,7 +362,17 @@ func (m *ProviderInterface) UpgradeResourceState(req providers.UpgradeResourceSt
 
 // Configure configures and initialized the provider.
 func (m *ProviderInterface) Configure(req providers.ConfigureRequest) providers.ConfigureResponse {
-	return providers.ConfigureResponse{}
+	var s providers.ConfigureResponse
+	if m.skipConfigure {
+		return s
+	}
+	p, err := m.plugin()
+	if err != nil {
+		s.Diagnostics = s.Diagnostics.Append(err)
+	} else {
+		s = p.Configure(req)
+	}
+	return s
 }
 
 // Stop is called when the provider should halt any in-flight actions.

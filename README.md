@@ -186,6 +186,18 @@ Use with care : this flag won't change the version of `terraform` effectively us
 
 To know which vesion of `terraform` is embedded in `terraspec`, run `terraspec --version`.
 
+### AWS Provider v3
+Starting with version 3 of aws provider, it is required to run the provider configuration step. This means that when running `terraspec` you need to be able to authenticate to aws as you would when running a `terraform plan`, for instance.
+
+
+By default, `terraspec` won't run the provider configuration phase. So when your terraform config uses aws provider in version 3, your need to run terraspec with `--configure-provider` flag.
+
+If you use aws provider v3 and don't use `--configure-provider`, `terraspec` will error with this message (meaning the aws plugin crashed):
+
+```
+rpc error: code = Unavailable desc = transport is closing :
+```
+
 ## Installation
 
 For gophers, running `go get github.com/nhurel/terraspec` should do the trick.

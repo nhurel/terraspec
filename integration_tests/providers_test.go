@@ -82,7 +82,7 @@ func TestBuildProviderResolverFindsCustomProvider(t *testing.T) {
 				awsPath = filepath.FromSlash(path.Join(projectPluginFolder, osArch, awsFileName))
 			}
 
-			providerResolver, err := terraspec.BuildProviderResolver(testCase.testProjectPath)
+			providerResolver, err := terraspec.BuildProviderResolver(testCase.testProjectPath, false)
 			if err != nil {
 				t.Fatalf("%v", err)
 			}
