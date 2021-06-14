@@ -176,3 +176,85 @@ func TestGetFake(t *testing.T) {
 	}
 
 }
+
+func TestReadDataSource(t *testing.T) {
+	providerConfig := map[string]cty.Value{
+		"prov": cty.ObjectVal(map[string]cty.Value{
+			"region": cty.StringVal("default"),
+		}),
+		"prov.region1": cty.ObjectVal(map[string]cty.Value{
+			"region": cty.StringVal("region-1"),
+		}),
+		"prov.region2": cty.ObjectVal(map[string]cty.Value{
+			"region": cty.StringVal("region-2"),
+		}),
+	}
+
+	datasourceQuery := cty.ObjectVal(map[string]cty.Value{"query": cty.StringVal("123")})
+
+	mockDefault := &Mock{TypeName: TypeName{Type: "prov_type", Name: "resource"}, Query: datasourceQuery, Data: cty.MapVal(map[string]cty.Value{"name": cty.StringVal("default")}), ProviderAlias: "prov"}
+	mockRegion1 := &Mock{TypeName: TypeName{Type: "prov_type", Name: "resource"}, Query: datasourceQuery, Data: cty.MapVal(map[string]cty.Value{"name": cty.StringVal("region1")}), ProviderAlias: "prov.region1"}
+	mockRegion2 := &Mock{TypeName: TypeName{Type: "prov_type", Name: "resource"}, Query: datasourceQuery, Data: cty.MapVal(map[string]cty.Value{"name": cty.StringVal("region2")}), ProviderAlias: "prov.region2"}
+
+	tests := map[string]struct {
+		//all providerConfigs known by mockDataSourceReader
+		provConfig map[string]cty.Value
+		//all mocks known by mockDataSourceReader
+		mocks []*Mock
+		//datasource query
+		configParam cty.Value
+		//the config of the provider that runs the query
+		providerParam cty.Value
+		expected      cty.Value
+	}{
+		"shouldFindRegion1": {
+			provConfig:    providerConfig,
+			mocks:         []*Mock{mockDefault, mockRegion1, mockRegion2},
+			configParam:   datasourceQuery,
+			providerParam: providerConfig[mockRegion1.ProviderAlias],
+			expected:      mockRegion1.Data,
+		},
+		"shouldFindRegion2": {
+			provConfig:    providerConfig,
+			mocks:         []*Mock{mockDefault, mockRegion1, mockRegion2},
+			configParam:   datasourceQuery,
+			providerParam: providerConfig[mockRegion2.ProviderAlias],
+			expected:      mockRegion2.Data,
+		},
+		"shouldFindDefault": {
+			provConfig:    providerConfig,
+			mocks:         []*Mock{mockDefault, mockRegion1, mockRegion2},
+			configParam:   datasourceQuery,
+			providerParam: providerConfig[mockDefault.ProviderAlias],
+			expected:      mockDefault.Data,
+		},
+		"shouldReturnQueryWhenNoMockFound": {
+			provConfig:    providerConfig,
+			mocks:         []*Mock{mockDefault, mockRegion2},
+			configParam:   datasourceQuery,
+			providerParam: providerConfig[mockRegion1.ProviderAlias],
+			expected:      datasourceQuery,
+		},
+		"shouldReturnFirstMatchWhenAliasIsDefault": {
+			provConfig:    providerConfig,
+			mocks:         []*Mock{mockRegion1, mockRegion2},
+			configParam:   datasourceQuery,
+			providerParam: providerConfig[mockDefault.ProviderAlias],
+			expected:      mockRegion1.Data,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			mdsr := &MockDataSourceReader{}
+			mdsr.SetProviderConfig(tt.provConfig)
+			mdsr.SetMock(tt.mocks)
+
+			got := mdsr.ReadDataSource("prov_type", tt.configParam, tt.providerParam)
+			if !got.RawEquals(tt.expected) {
+				t.Errorf("ReadDataSource didn't return expected value. Got: %v\n Expected: %v", got, tt.expected)
+			}
+		})
+	}
+
+}

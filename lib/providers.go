@@ -38,6 +38,7 @@ type ProviderResolver struct {
 type MockDataSourceReader struct {
 	mockDataSources []*Mock
 	unmatchedCalls  []cty.Value
+	providerConfigs map[string]cty.Value
 	mux             sync.RWMutex
 }
 
@@ -46,12 +47,30 @@ func (m *MockDataSourceReader) SetMock(mocks []*Mock) {
 	m.mockDataSources = mocks
 }
 
+// SetProviderConfig populates mock data
+func (m *MockDataSourceReader) SetProviderConfig(providerConfigs map[string]cty.Value) {
+	m.providerConfigs = providerConfigs
+}
+
 // ReadDataSource returns a mock response for the datasource call
-func (m *MockDataSourceReader) ReadDataSource(typeName string, config cty.Value) cty.Value {
+func (m *MockDataSourceReader) ReadDataSource(typeName string, config cty.Value, providerConfig cty.Value) cty.Value {
 	var mockedResult cty.Value = config
+	var candidate *Mock
 	for _, mock := range m.mockDataSources {
 		if typeName == mock.Type && mock.Query.RawEquals(config) {
-			mockedResult = mock.Call()
+			if pc, ok := m.providerConfigs[mock.ProviderAlias]; ok && pc.RawEquals(providerConfig) {
+				mockedResult = mock.Call()
+				return mockedResult
+			}
+			if candidate == nil {
+				candidate = mock
+			}
+		}
+	}
+	// if caller's providerConfig matches default provider's config, then return the first candidate, if any
+	if candidate != nil {
+		if pc, ok := m.providerConfigs[strings.Split(typeName, "_")[0]]; !ok || pc.RawEquals(providerConfig) {
+			mockedResult = candidate.Call()
 			return mockedResult
 		}
 	}
@@ -280,6 +299,7 @@ type ProviderInterface struct {
 	_plugin            *plugin.GRPCProvider
 	lock               sync.Mutex
 	skipConfigure      bool
+	config             cty.Value
 }
 
 var _ providers.Interface = (*ProviderInterface)(nil)
@@ -363,6 +383,7 @@ func (m *ProviderInterface) UpgradeResourceState(req providers.UpgradeResourceSt
 // Configure configures and initialized the provider.
 func (m *ProviderInterface) Configure(req providers.ConfigureRequest) providers.ConfigureResponse {
 	var s providers.ConfigureResponse
+	m.config = req.Config
 	if m.skipConfigure {
 		return s
 	}
@@ -427,7 +448,7 @@ func (m *ProviderInterface) ImportResourceState(req providers.ImportResourceStat
 
 // ReadDataSource returns the data source's current state.
 func (m *ProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
-	mockedResult := m.dataSourceProvider.ReadDataSource(req.TypeName, req.Config)
+	mockedResult := m.dataSourceProvider.ReadDataSource(req.TypeName, req.Config, m.config)
 	return providers.ReadDataSourceResponse{State: mockedResult}
 }
 
@@ -529,7 +550,7 @@ func (w *WrappedProviderInterface) ImportResourceState(req providers.ImportResou
 
 // ReadDataSource returns the data source's current state.
 func (w *WrappedProviderInterface) ReadDataSource(req providers.ReadDataSourceRequest) providers.ReadDataSourceResponse {
-	mockedResult := w.dataSourceProvider.ReadDataSource(req.TypeName, req.Config)
+	mockedResult := w.dataSourceProvider.ReadDataSource(req.TypeName, req.Config, cty.NilVal)
 	return providers.ReadDataSourceResponse{State: mockedResult}
 }
 

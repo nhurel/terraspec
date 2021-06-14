@@ -5,6 +5,9 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hcldec"
+	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
 	"github.com/hashicorp/terraform/configs/configload"
 	"github.com/hashicorp/terraform/terraform"
@@ -117,4 +120,27 @@ func LookupProviderSchema(schemas *terraform.Schemas, providerType string) (*ter
 		}
 	}
 	return nil, fmt.Errorf("unknown provider \"%s\"", providerType)
+}
+
+func ProvidersMapFromConfig(cfg configs.Config, schema *terraform.Schemas) map[string]cty.Value {
+	provMap := make(map[string]cty.Value)
+	if m := cfg.Module; m != nil {
+		for alias, provCfg := range m.ProviderConfigs {
+			s := providerSchema(schema, provCfg.Addr())
+			if s != nil {
+				b, _ := hcldec.Decode(provCfg.Config, s.Provider.DecoderSpec(), &hcl.EvalContext{})
+				provMap[alias] = b
+			}
+		}
+	}
+	return provMap
+}
+
+func providerSchema(schema *terraform.Schemas, addr addrs.LocalProviderConfig) *terraform.ProviderSchema {
+	for a, s := range schema.Providers {
+		if a.Type == addr.LocalName {
+			return s
+		}
+	}
+	return nil
 }

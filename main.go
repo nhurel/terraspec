@@ -227,6 +227,8 @@ func PrepareTestSuite(dir string, tc *testCase, tsCtx *terraspec.Context) (*terr
 	//If spec contains mocked data source results, they must be provided to the DataSourceReader
 	if len(spec.Mocks) > 0 {
 		providerResolver.DataSourceReader.SetMock(spec.Mocks)
+		provMap := terraspec.ProvidersMapFromConfig(*tfCtxOpts.Config, schemas)
+		providerResolver.DataSourceReader.SetProviderConfig(provMap)
 	}
 	providerResolver.ResourceCreator.SetFakes(spec.Asserts)
 	spec.DataSourceReader = providerResolver.DataSourceReader

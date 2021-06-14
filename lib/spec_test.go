@@ -117,6 +117,31 @@ func TestParsingWithWorkspace(t *testing.T) {
 	}
 }
 
+func TestParsingMockWithProvider(t *testing.T) {
+	spec := readSpecWithSchemas(t, "testdata/scenario_mock_provider.tfspec")
+
+	expectedMock := cty.ObjectVal(
+		map[string]cty.Value{
+			"id":    cty.NumberIntVal(12345),
+			"name":  cty.StringVal("fetched_data"),
+			"query": cty.NumberIntVal(12345),
+		},
+	)
+	if !spec.Mocks[0].Data.RawEquals(expectedMock) {
+		t.Errorf("mocks[0].Data not as expected. \nGot %s\nWant %s", spec.Mocks[0].Data.GoString(), expectedMock.GoString())
+	}
+	if got := spec.Mocks[0].ProviderAlias; got != "data" {
+		t.Errorf("mocks[0].ProviderAlias not empty. Got %s", got)
+	}
+
+	if !spec.Mocks[1].Data.RawEquals(expectedMock) {
+		t.Errorf("mocks[1].Data not as expected. \nGot %s\nWant %s", spec.Mocks[1].Data.GoString(), expectedMock.GoString())
+	}
+	if got := spec.Mocks[1].ProviderAlias; got != "provider.alias" {
+		t.Errorf("mocks[0].ProviderAlias not provider.alias : Got %s", got)
+	}
+}
+
 func TestParsingNoWorkspace(t *testing.T) {
 
 	tests := map[string]string{

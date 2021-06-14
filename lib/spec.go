@@ -45,10 +45,11 @@ type Assert struct {
 // Mock struct contains the definition of mocked data resources
 type Mock struct {
 	TypeName
-	Query cty.Value
-	Data  cty.Value
-	Body  []byte
-	calls int
+	Query         cty.Value
+	Data          cty.Value
+	Body          []byte
+	ProviderAlias string
+	calls         int
 }
 
 // Context struct holds terraspec options and internal state
@@ -71,8 +72,8 @@ func NewAssert(aType, aName string, aValue cty.Value, rValue cty.Value) *Assert 
 }
 
 // NewMock is a convenient method to instanciate a new Mock struct with given parameters
-func NewMock(aType, aName string, aQuery, aData cty.Value, aBody []byte) *Mock {
-	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, Query: aQuery, Data: aData, Body: aBody}
+func NewMock(aType, aName, aProvider string, aQuery, aData cty.Value, aBody []byte) *Mock {
+	return &Mock{TypeName: TypeName{Type: aType, Name: aName}, ProviderAlias: aProvider, Query: aQuery, Data: aData, Body: aBody}
 }
 
 // Key return fully qualified name of an Assert
@@ -384,9 +385,10 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		DependsOn hcl.Expression `hcl:"depends_on,attr"`
 	}
 	type mock struct {
-		Type   string   `hcl:"type,label"`
-		Name   string   `hcl:"name,label"`
-		Config hcl.Body `hcl:",remain"`
+		Type     string   `hcl:"type,label"`
+		Name     string   `hcl:"name,label"`
+		Provider string   `hcl:"provider,optional"`
+		Config   hcl.Body `hcl:",remain"`
 	}
 	type reject struct {
 		Type   string   `hcl:"type,label"`
@@ -451,7 +453,11 @@ func ParseSpec(spec []byte, filename string, schemas *terraform.Schemas) (*Spec,
 		if r, ok := mock.Config.(*hclsyntax.Body); ok {
 			body = r.Range().SliceBytes(file.Bytes)
 		}
-		parsed.Mocks = append(parsed.Mocks, NewMock(mock.Type, mock.Name, query, mocked, body))
+		p := mock.Provider
+		if p == "" {
+			p = strings.Split(mock.Type, "_")[0]
+		}
+		parsed.Mocks = append(parsed.Mocks, NewMock(mock.Type, mock.Name, p, query, mocked, body))
 	}
 
 	return parsed, diags

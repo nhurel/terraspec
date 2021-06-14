@@ -109,6 +109,43 @@ mock "aws_vpcs" "selected" {
 }
 ```
 
+### Mock data resource with different provider
+In some situations you may declare multiple providers and call the same datasource with each of them. So your terraform code look like :
+
+```hcl
+provider "aws" {
+  region = "eu-west-1"
+}
+
+provider "aws" {
+  alias = "eu-west-2"
+  region = "eu-west-2"
+}
+
+data "aws_region" "west1" {}
+data "aws_region" "west2" {
+    provider = aws.eu-west-2
+}
+```
+
+In such situation, you can specify different mocks, using the `provider` attribute of mock resources. For example, your terraspec code would be :
+
+```hcl
+mock "aws_region" "west1"{
+    return {
+        name = "ireland"
+    }
+}
+mock "aws_region" "west2"{
+    provider = "aws.eu-west-2"
+    return {
+        name = "london"
+    }
+}
+```
+
+Note that the provider value is a string containing the provider name (aws) and its alias (eu-west-2) separated by a dot.
+
 ### Terraform Workspace
 
 If you want to use the terraform workspace feature in terraspec you need to first configure which workspace value to use. You can do this in a spec global element `terraspec`:
